@@ -114,25 +114,49 @@ export type Database = {
       }
       suppliers: {
         Row: {
+          contact_person: string | null
           created_at: string
           email: string
+          factory: string | null
+          focus_area: string | null
           id: string
+          location: string | null
+          logo_url: string | null
           name: string
+          notes: string | null
+          phone: string | null
           updated_at: string
+          website: string | null
         }
         Insert: {
+          contact_person?: string | null
           created_at?: string
           email: string
+          factory?: string | null
+          focus_area?: string | null
           id?: string
+          location?: string | null
+          logo_url?: string | null
           name: string
+          notes?: string | null
+          phone?: string | null
           updated_at?: string
+          website?: string | null
         }
         Update: {
+          contact_person?: string | null
           created_at?: string
           email?: string
+          factory?: string | null
+          focus_area?: string | null
           id?: string
+          location?: string | null
+          logo_url?: string | null
           name?: string
+          notes?: string | null
+          phone?: string | null
           updated_at?: string
+          website?: string | null
         }
         Relationships: []
       }
