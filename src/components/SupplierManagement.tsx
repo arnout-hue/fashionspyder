@@ -53,6 +53,135 @@ const emptyFormData: SupplierFormData = {
   notes: "",
 };
 
+// Extracted as a stable component to prevent re-mounting on every keystroke
+interface SupplierFormFieldsProps {
+  formData: SupplierFormData;
+  updateField: (field: keyof SupplierFormData, value: string) => void;
+}
+
+const SupplierFormFields = ({ formData, updateField }: SupplierFormFieldsProps) => (
+  <div className="space-y-4">
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="name">Supplier Name *</Label>
+        <Input
+          id="name"
+          placeholder="e.g., Fashion Forward Ltd"
+          value={formData.name}
+          onChange={(e) => updateField("name", e.target.value)}
+          maxLength={100}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="contact_person">Contact Person</Label>
+        <Input
+          id="contact_person"
+          placeholder="e.g., John Smith"
+          value={formData.contact_person}
+          onChange={(e) => updateField("contact_person", e.target.value)}
+          maxLength={100}
+        />
+      </div>
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="email">Email Address *</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="orders@supplier.com"
+          value={formData.email}
+          onChange={(e) => updateField("email", e.target.value)}
+          maxLength={255}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="phone">Phone Number</Label>
+        <Input
+          id="phone"
+          type="tel"
+          placeholder="+31 20 123 4567"
+          value={formData.phone}
+          onChange={(e) => updateField("phone", e.target.value)}
+          maxLength={50}
+        />
+      </div>
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="website">Website</Label>
+        <Input
+          id="website"
+          type="url"
+          placeholder="https://supplier.com"
+          value={formData.website}
+          onChange={(e) => updateField("website", e.target.value)}
+          maxLength={500}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="logo_url">Logo URL</Label>
+        <Input
+          id="logo_url"
+          type="url"
+          placeholder="https://supplier.com/logo.png"
+          value={formData.logo_url}
+          onChange={(e) => updateField("logo_url", e.target.value)}
+          maxLength={500}
+        />
+      </div>
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="location">Location</Label>
+        <Input
+          id="location"
+          placeholder="e.g., Amsterdam, Netherlands"
+          value={formData.location}
+          onChange={(e) => updateField("location", e.target.value)}
+          maxLength={200}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="factory">Factory</Label>
+        <Input
+          id="factory"
+          placeholder="e.g., Portugal, Turkey"
+          value={formData.factory}
+          onChange={(e) => updateField("factory", e.target.value)}
+          maxLength={200}
+        />
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="focus_area">Focus Area</Label>
+      <Input
+        id="focus_area"
+        placeholder="e.g., Knitwear, Denim, Dresses"
+        value={formData.focus_area}
+        onChange={(e) => updateField("focus_area", e.target.value)}
+        maxLength={300}
+      />
+    </div>
+
+    <div className="space-y-2">
+      <Label htmlFor="notes">Notes</Label>
+      <Textarea
+        id="notes"
+        placeholder="Additional notes about this supplier..."
+        value={formData.notes}
+        onChange={(e) => updateField("notes", e.target.value)}
+        maxLength={1000}
+        rows={3}
+      />
+    </div>
+  </div>
+);
+
 interface SupplierManagementProps {
   suppliers: Supplier[];
   onAddSupplier: (supplier: Omit<Supplier, "id" | "created_at" | "updated_at">) => void;
@@ -142,128 +271,6 @@ export const SupplierManagement = ({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const SupplierFormFields = ({ inDialog = false }: { inDialog?: boolean }) => (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="name">Supplier Name *</Label>
-          <Input
-            id="name"
-            placeholder="e.g., Fashion Forward Ltd"
-            value={formData.name}
-            onChange={(e) => updateField("name", e.target.value)}
-            maxLength={100}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="contact_person">Contact Person</Label>
-          <Input
-            id="contact_person"
-            placeholder="e.g., John Smith"
-            value={formData.contact_person}
-            onChange={(e) => updateField("contact_person", e.target.value)}
-            maxLength={100}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email Address *</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="orders@supplier.com"
-            value={formData.email}
-            onChange={(e) => updateField("email", e.target.value)}
-            maxLength={255}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="+31 20 123 4567"
-            value={formData.phone}
-            onChange={(e) => updateField("phone", e.target.value)}
-            maxLength={50}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="website">Website</Label>
-          <Input
-            id="website"
-            type="url"
-            placeholder="https://supplier.com"
-            value={formData.website}
-            onChange={(e) => updateField("website", e.target.value)}
-            maxLength={500}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="logo_url">Logo URL</Label>
-          <Input
-            id="logo_url"
-            type="url"
-            placeholder="https://supplier.com/logo.png"
-            value={formData.logo_url}
-            onChange={(e) => updateField("logo_url", e.target.value)}
-            maxLength={500}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="location">Location</Label>
-          <Input
-            id="location"
-            placeholder="e.g., Amsterdam, Netherlands"
-            value={formData.location}
-            onChange={(e) => updateField("location", e.target.value)}
-            maxLength={200}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="factory">Factory</Label>
-          <Input
-            id="factory"
-            placeholder="e.g., Portugal, Turkey"
-            value={formData.factory}
-            onChange={(e) => updateField("factory", e.target.value)}
-            maxLength={200}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="focus_area">Focus Area</Label>
-        <Input
-          id="focus_area"
-          placeholder="e.g., Knitwear, Denim, Dresses"
-          value={formData.focus_area}
-          onChange={(e) => updateField("focus_area", e.target.value)}
-          maxLength={300}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          placeholder="Additional notes about this supplier..."
-          value={formData.notes}
-          onChange={(e) => updateField("notes", e.target.value)}
-          maxLength={1000}
-          rows={3}
-        />
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
@@ -287,7 +294,7 @@ export const SupplierManagement = ({
               <DialogTitle className="font-display">Add New Supplier</DialogTitle>
             </DialogHeader>
             <div className="pt-4">
-              <SupplierFormFields inDialog />
+              <SupplierFormFields formData={formData} updateField={updateField} />
               <Button onClick={handleAddSupplier} className="w-full mt-6">
                 Add Supplier
               </Button>
@@ -387,7 +394,7 @@ export const SupplierManagement = ({
                       <DialogTitle className="font-display">Edit Supplier</DialogTitle>
                     </DialogHeader>
                     <div className="pt-4">
-                      <SupplierFormFields inDialog />
+                      <SupplierFormFields formData={formData} updateField={updateField} />
                       <Button onClick={() => handleSaveEdit(supplier)} className="w-full mt-6">
                         Save Changes
                       </Button>
