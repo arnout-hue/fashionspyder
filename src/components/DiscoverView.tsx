@@ -99,9 +99,9 @@ export const DiscoverView = ({
         </div>
       </div>
 
-      {/* Grid View Bulk Actions */}
+      {/* Grid View Bulk Actions - Sticky */}
       {viewMode === "grid" && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
+        <div className="sticky top-0 z-20 mb-6 flex flex-wrap items-center gap-3 rounded-lg border bg-card/95 p-4 backdrop-blur-sm shadow-sm">
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
