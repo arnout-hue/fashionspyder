@@ -22,6 +22,16 @@ type MapOptions = {
   includeSubdomains?: boolean;
 };
 
+interface Product {
+  id: string;
+  name: string;
+  price?: string;
+  image_url?: string;
+  product_url: string;
+  competitor: string;
+  notes?: string;
+}
+
 export const firecrawlApi = {
   // Scrape a single URL
   async scrape(url: string, options?: ScrapeOptions): Promise<FirecrawlResponse> {
@@ -51,6 +61,50 @@ export const firecrawlApi = {
   async scrapeCompetitor(competitorId: string, limit?: number): Promise<FirecrawlResponse> {
     const { data, error } = await supabase.functions.invoke('scrape-competitor-products', {
       body: { competitor: competitorId, limit },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+};
+
+export const emailApi = {
+  // Send supplier request email
+  async sendSupplierEmail(
+    supplierId: string,
+    supplierEmail: string,
+    supplierName: string,
+    products: Product[],
+    senderName?: string,
+    customMessage?: string
+  ): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase.functions.invoke('send-supplier-email', {
+      body: { supplierId, supplierEmail, supplierName, products, senderName, customMessage },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
+  // Send notification email
+  async sendNotification(
+    recipientEmail: string,
+    competitorName: string,
+    newProductsCount: number,
+    products?: Partial<Product>[]
+  ): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase.functions.invoke('send-notification-email', {
+      body: { 
+        recipientEmail, 
+        subject: `${newProductsCount} new products from ${competitorName}`,
+        competitorName, 
+        newProductsCount, 
+        products 
+      },
     });
 
     if (error) {

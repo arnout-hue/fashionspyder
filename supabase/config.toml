@@ -2,3 +2,9 @@ project_id = "zfdyoofshguvxvmjgdnp"
 
 [functions.scheduled-crawl]
 verify_jwt = false
+
+[functions.send-supplier-email]
+verify_jwt = false
+
+[functions.send-notification-email]
+verify_jwt = false
