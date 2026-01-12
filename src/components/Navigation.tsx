@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, Globe } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, Globe, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
 type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "settings";
@@ -33,6 +34,7 @@ export const Navigation = ({
   onCompetitorChange,
   competitors,
 }: NavigationProps) => {
+  const { signOut } = useAuth();
   const navItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
     {
       id: "swipe",
@@ -101,21 +103,32 @@ export const Navigation = ({
           ))}
         </nav>
 
-        {/* Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={selectedCompetitor} onValueChange={onCompetitorChange}>
-            <SelectTrigger className="h-9 w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {competitors.map((competitor) => (
-                <SelectItem key={competitor} value={competitor}>
-                  {competitor}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Filter and Logout */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedCompetitor} onValueChange={onCompetitorChange}>
+              <SelectTrigger className="h-9 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {competitors.map((competitor) => (
+                  <SelectItem key={competitor} value={competitor}>
+                    {competitor}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={signOut}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Logout</span>
+          </Button>
         </div>
       </div>
 

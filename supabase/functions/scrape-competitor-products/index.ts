@@ -1,4 +1,4 @@
-// Competitor product scraper - v2
+// Competitor product scraper - v2 with authentication
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -178,6 +178,38 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.log('Missing or invalid Authorization header');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    
+    // Create client with user's auth token
+    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Verify user is authenticated
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await authSupabase.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.log('Authentication failed:', claimsError?.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Authenticated user:', claimsData.claims.sub);
+
     const { competitor, limit = 50 } = await req.json();
 
     if (!competitor) {
@@ -195,9 +227,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use service role for database operations
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch competitor from database
     const { data: competitorData, error: competitorError } = await supabase
@@ -231,7 +263,7 @@ Deno.serve(async (req) => {
     const competitorConfig: CompetitorConfig = competitorData;
     console.log(`[v3] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
-// Step 1: Scrape the listing page to extract product links
+    // Step 1: Scrape the listing page to extract product links
     console.log('Scraping listing page for product links...');
     const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
