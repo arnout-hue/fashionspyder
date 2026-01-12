@@ -15,6 +15,11 @@ interface CompetitorConfig {
 }
 
 function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean {
+  // First check if custom patterns are defined - use them exclusively
+  if (patterns && patterns.length > 0) {
+    return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
+  }
+
   // Exclude common non-product patterns
   const excludePatterns = [
     /\/collections?\/?$/i,
@@ -22,9 +27,9 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean
     /\/nieuw\/?$/i,
     /\/new\/?$/i,
     /\/new-arrivals\/?$/i,
+    /\/newarrivals\/?$/i,
     /\/shop\/?$/i,
-    /\/kleding\/?$/i,
-    /\/kleding\/[^\/]+\/?$/i, // Category pages like /kleding/dames-jurken/
+    /\/kleding/i,
     /\/page\/\d+/i,
     /\?.*page=/i,
     /\/cart/i,
@@ -44,21 +49,27 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean
     /\/sale\/?$/i,
     /\/party\/?$/i,
     /\/back-in-stock/i,
-    /\/accessoires\/?$/i,
-    /\/schoenen\/?$/i,
-    /\/tassen\/?$/i,
+    /\/accessoires/i,
+    /\/schoenen/i,
+    /\/tassen/i,
+    /\/giftcard/i,
+    /\/campagnes/i,
+    /\/trends\/?$/i,
+    /\/lookbook/i,
+    /\/brand/i,
+    /\/info/i,
+    /\/customer/i,
+    /\/returns/i,
+    /\/shipping/i,
     /#.*/i,
-    /\?.*$/i, // Exclude URLs with query params
+    /\?.*$/i,
   ];
 
-  // Also exclude the base URL itself and homepage
+  // Exclude the base URL itself and homepage
   try {
     const urlObj = new URL(url);
-    const baseUrlObj = new URL(baseUrl);
-    if (urlObj.pathname === '/' || urlObj.pathname === '') return false;
-    if (url === baseUrl || url === baseUrl.replace(/\/$/, '')) return false;
+    if (urlObj.pathname === '/' || urlObj.pathname === '' || urlObj.pathname === '/nl/' || urlObj.pathname === '/nl') return false;
   } catch {
-    // Invalid URL
     return false;
   }
 
@@ -66,20 +77,11 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean
     return false;
   }
 
-  // If custom patterns are defined, use them
-  if (patterns && patterns.length > 0) {
-    return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
-  }
-
-  // Default pattern matching: look for product IDs in URLs
-  // Loavies: /nl/29579330906-vesten-bruin-gestreepte-print/
-  // Most sites have numeric IDs or specific product paths
+  // Look for product IDs in URLs - most e-commerce sites use numeric IDs
   const productPatterns = [
-    /\/\d{5,}-[a-z-]+/i, // Numeric ID followed by slug (Loavies style)
+    /\/\d{5,}-[a-z-]+/i, // Numeric ID followed by slug (Loavies: /29579330906-vesten-bruin/)
     /\/product[s]?\/[^\/]+$/i,
     /\/p\/[^\/]+$/i,
-    /\/[a-z-]+-\d+\.html$/i,
-    /\/collections?\/[^\/]+\/products?\/[^\/]+$/i,
     /\/item\/[^\/]+$/i,
     /\/artikel\/[^\/]+$/i,
   ];
