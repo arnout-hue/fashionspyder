@@ -7,13 +7,14 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { PasswordGate } from "@/components/PasswordGate";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Protected route wrapper
+// Protected route wrapper with approval check
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isApproved, profile } = useAuth();
   
   if (loading) {
     return (
@@ -26,6 +27,53 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
+
+  // Wait for profile to load before checking approval
+  if (profile === null && user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-muted-foreground">Loading profile...</div>
+      </div>
+    );
+  }
+
+  // Check if user is approved
+  if (!isApproved) {
+    return <Navigate to="/pending" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+// Pending route wrapper - shows pending page only for unapproved users
+function PendingRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading, isApproved, profile } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // Wait for profile to load
+  if (profile === null && user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse text-muted-foreground">Loading profile...</div>
+      </div>
+    );
+  }
+
+  // If approved, redirect to main app
+  if (isApproved) {
+    return <Navigate to="/" replace />;
+  }
   
   return <>{children}</>;
 }
@@ -33,6 +81,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 const AppRoutes = () => (
   <Routes>
     <Route path="/auth" element={<Auth />} />
+    <Route path="/pending" element={
+      <PendingRoute>
+        <PendingApproval />
+      </PendingRoute>
+    } />
     <Route path="/" element={
       <ProtectedRoute>
         <Index />
