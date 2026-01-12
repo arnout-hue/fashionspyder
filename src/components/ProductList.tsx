@@ -12,6 +12,9 @@ import {
   Users,
   ThumbsUp,
   ThumbsDown,
+  Send,
+  Loader2,
+  UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,16 +27,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Product, Supplier } from "@/data/mockData";
+import { Colleague } from "@/components/ColleagueManagement";
+import { emailApi } from "@/lib/api/firecrawl";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProductListProps {
   products: Product[];
   suppliers: Supplier[];
+  colleagues?: Colleague[];
   type: "positive" | "negative";
   onUpdateProduct: (productId: string, updates: Partial<Product>) => void;
   onMoveProduct: (product: Product) => void;
@@ -44,15 +60,24 @@ interface ProductListProps {
 export const ProductList = ({
   products,
   suppliers,
+  colleagues = [],
   type,
   onUpdateProduct,
   onMoveProduct,
   onBulkStatusChange,
   onBulkAssignSupplier,
 }: ProductListProps) => {
+  const { toast } = useToast();
   const [expandedNotes, setExpandedNotes] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkSupplierId, setBulkSupplierId] = useState<string>("");
+  
+  // Colleague email dialog state
+  const [colleagueDialogOpen, setColleagueDialogOpen] = useState(false);
+  const [selectedColleagueId, setSelectedColleagueId] = useState<string>("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [customMessage, setCustomMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -84,6 +109,71 @@ export const ProductList = ({
       onBulkAssignSupplier(Array.from(selectedIds), bulkSupplierId);
       setSelectedIds(new Set());
       setBulkSupplierId("");
+    }
+  };
+
+  const openColleagueDialog = () => {
+    if (selectedIds.size === 0) return;
+    setEmailSubject(`Product Selection - ${selectedIds.size} items`);
+    setCustomMessage("");
+    setSelectedColleagueId("");
+    setColleagueDialogOpen(true);
+  };
+
+  const handleSendToColleague = async () => {
+    if (!selectedColleagueId) {
+      toast({
+        title: "Select a colleague",
+        description: "Please select a colleague to send to.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const colleague = colleagues.find(c => c.id === selectedColleagueId);
+    if (!colleague) return;
+
+    const selectedProducts = products.filter(p => selectedIds.has(p.id));
+    
+    setIsSending(true);
+    try {
+      const response = await emailApi.sendColleagueEmail(
+        colleague.id,
+        colleague.email,
+        colleague.name,
+        selectedProducts.map(p => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          image_url: p.image_url,
+          product_url: p.product_url,
+          competitor: p.competitor,
+          notes: p.notes,
+        })),
+        undefined,
+        customMessage || undefined,
+        emailSubject || undefined
+      );
+
+      if (response.success) {
+        toast({
+          title: "Email sent!",
+          description: `Product selection sent to ${colleague.name} (${selectedProducts.length} items).`,
+        });
+        setColleagueDialogOpen(false);
+        setSelectedIds(new Set());
+      } else {
+        throw new Error(response.error || 'Failed to send email');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send email';
+      toast({
+        title: "Error sending email",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -166,6 +256,19 @@ export const ProductList = ({
                     Assign
                   </Button>
                 </div>
+              )}
+
+              {/* Send to Colleague (Positive list only) */}
+              {type === "positive" && colleagues.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5"
+                  onClick={openColleagueDialog}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Send to Colleague
+                </Button>
               )}
 
               {/* Move to opposite list */}
@@ -371,6 +474,94 @@ export const ProductList = ({
           );
         })}
       </div>
+
+      {/* Send to Colleague Dialog */}
+      <Dialog open={colleagueDialogOpen} onOpenChange={setColleagueDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send to Colleague</DialogTitle>
+            <DialogDescription>
+              Share {selectedIds.size} selected product(s) with a colleague via email
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-2">Select Colleague *</p>
+              <Select value={selectedColleagueId} onValueChange={setSelectedColleagueId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a colleague..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {colleagues.map((colleague) => (
+                    <SelectItem key={colleague.id} value={colleague.id}>
+                      {colleague.name} ({colleague.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">Email Subject</p>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Product Selection"
+              />
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium mb-2">Message (optional)</p>
+              <Textarea
+                value={customMessage}
+                onChange={(e) => setCustomMessage(e.target.value)}
+                placeholder="Add a note for your colleague..."
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">Products to include</p>
+              <div className="flex flex-wrap gap-2">
+                {products.filter(p => selectedIds.has(p.id)).slice(0, 5).map((p) => (
+                  <img
+                    key={p.id}
+                    src={p.image_url || "/placeholder.svg"}
+                    alt={p.name}
+                    className="h-12 w-12 rounded border object-cover"
+                    title={p.name}
+                  />
+                ))}
+                {selectedIds.size > 5 && (
+                  <div className="flex h-12 w-12 items-center justify-center rounded border bg-muted text-xs">
+                    +{selectedIds.size - 5}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setColleagueDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendToColleague} disabled={isSending || !selectedColleagueId}>
+              {isSending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
