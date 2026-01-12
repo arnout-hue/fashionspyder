@@ -294,11 +294,12 @@ function cleanProductName(name: string): string {
     .replace(/\s+/g, ' '); // Normalize spaces
 }
 
-// Phase 3: LLM-based JSON extraction using Firecrawl's scrape with JSON format
+// Phase 3: Scrape and extract product data using Firecrawl's scrape with LLM extraction
 async function extractProductWithLLM(url: string, apiKey: string): Promise<ExtractedProduct | null> {
   console.log(`[LLM Extract] ${url}`);
 
   try {
+    // Use scrape endpoint with extract format for synchronous LLM extraction
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -307,30 +308,19 @@ async function extractProductWithLLM(url: string, apiKey: string): Promise<Extra
       },
       body: JSON.stringify({
         url,
-        formats: [
-          {
-            type: 'json',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { 
-                  type: 'string', 
-                  description: 'The product name/title. Do not include brand name or size variants.' 
-                },
-                price: { 
-                  type: 'string', 
-                  description: 'The current selling price with currency symbol (e.g., €49.95). Use the sale/discounted price if available.' 
-                },
-                image_url: { 
-                  type: 'string', 
-                  description: 'The main product image URL. Must be a full URL starting with http. Do not use the site logo or icons.' 
-                },
-              },
-              required: ['name'],
+        formats: ['extract'],
+        extract: {
+          prompt: 'Extract the product information. Get the product name (without brand suffix), the price with currency, and the main product image URL.',
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Product name' },
+              price: { type: 'string', description: 'Price with currency (e.g., €49.95)' },
+              image_url: { type: 'string', description: 'Main product image URL' },
             },
-            prompt: 'Extract the main product information from this product detail page. For the image, find the main product photo (not the website logo). For the price, use the current/sale price if the item is discounted.',
+            required: ['name'],
           },
-        ],
+        },
         onlyMainContent: true,
         waitFor: 2000,
       }),
@@ -338,26 +328,27 @@ async function extractProductWithLLM(url: string, apiKey: string): Promise<Extra
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[LLM Extract] API error for ${url}:`, response.status, errorText.slice(0, 200));
+      console.error(`[LLM Extract] API error for ${url}:`, response.status, errorText.slice(0, 300));
       return null;
     }
 
     const data = await response.json();
+    console.log(`[LLM Extract] Response for ${url}:`, JSON.stringify(data).slice(0, 400));
     
-    // Extract JSON result from response
-    const jsonResult = data.data?.json || data.json || null;
+    // The extract is in data.data.extract or data.extract
+    const extracted = data.data?.extract || data.extract;
     
-    if (!jsonResult || !jsonResult.name) {
-      console.log(`[LLM Extract] No product data found for ${url}`);
+    if (!extracted || !extracted.name) {
+      console.log(`[LLM Extract] No product name found for ${url}`);
       return null;
     }
 
-    console.log(`[LLM Extract] Success: name="${jsonResult.name}", price="${jsonResult.price || 'N/A'}"`);
+    console.log(`[LLM Extract] Success: name="${extracted.name}", price="${extracted.price || 'N/A'}"`);
 
     return {
-      name: jsonResult.name,
-      price: jsonResult.price || null,
-      image_url: jsonResult.image_url || null,
+      name: extracted.name,
+      price: extracted.price || null,
+      image_url: extracted.image_url || null,
     };
   } catch (error) {
     console.error(`[LLM Extract] Error for ${url}:`, error);
@@ -365,7 +356,7 @@ async function extractProductWithLLM(url: string, apiKey: string): Promise<Extra
   }
 }
 
-// Phase 4: Batch processing with chunks of 10
+// Phase 4: Batch processing with chunks
 async function extractProductsBatch(
   urls: string[], 
   apiKey: string, 
