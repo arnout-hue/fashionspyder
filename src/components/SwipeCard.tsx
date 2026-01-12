@@ -9,9 +9,10 @@ interface SwipeCardProps {
   product: Product;
   onSwipe: (direction: "left" | "right") => void;
   isTop: boolean;
+  stackIndex: number;
 }
 
-export const SwipeCard = ({ product, onSwipe, isTop }: SwipeCardProps) => {
+export const SwipeCard = ({ product, onSwipe, isTop, stackIndex }: SwipeCardProps) => {
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   
   const x = useMotionValue(0);
@@ -34,37 +35,51 @@ export const SwipeCard = ({ product, onSwipe, isTop }: SwipeCardProps) => {
     }
   };
 
+  // Calculate scale and offset for stacked cards
+  const scale = 1 - stackIndex * 0.05;
+  const yOffset = stackIndex * 8;
+
   return (
     <motion.div
       className={`absolute w-full cursor-grab active:cursor-grabbing ${isTop ? "" : "pointer-events-none"}`}
-      style={{ x, rotate, opacity }}
-      drag={isTop ? "x" : false}
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.9}
-      onDragEnd={handleDragEnd}
+      style={{ 
+        x: isTop ? x : 0, 
+        rotate: isTop ? rotate : 0, 
+        opacity: isTop ? opacity : 1,
+        zIndex: 10 - stackIndex,
+      }}
+      initial={{ scale, y: yOffset }}
       animate={
         exitDirection === "right"
           ? { x: 500, rotate: 20, opacity: 0 }
           : exitDirection === "left"
           ? { x: -500, rotate: -20, opacity: 0 }
-          : {}
+          : { scale, y: yOffset }
       }
+      drag={isTop ? "x" : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.9}
+      onDragEnd={handleDragEnd}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <div className="relative overflow-hidden rounded-2xl bg-card shadow-elevated">
         {/* Like/Nope overlays */}
-        <motion.div
-          className="absolute top-8 right-8 z-10 rotate-12 rounded-lg border-4 border-success px-4 py-2"
-          style={{ opacity: likeOpacity }}
-        >
-          <span className="text-2xl font-bold text-success">LIKE</span>
-        </motion.div>
-        <motion.div
-          className="absolute top-8 left-8 z-10 -rotate-12 rounded-lg border-4 border-destructive px-4 py-2"
-          style={{ opacity: nopeOpacity }}
-        >
-          <span className="text-2xl font-bold text-destructive">NOPE</span>
-        </motion.div>
+        {isTop && (
+          <>
+            <motion.div
+              className="absolute top-8 right-8 z-10 rotate-12 rounded-lg border-4 border-success px-4 py-2"
+              style={{ opacity: likeOpacity }}
+            >
+              <span className="text-2xl font-bold text-success">LIKE</span>
+            </motion.div>
+            <motion.div
+              className="absolute top-8 left-8 z-10 -rotate-12 rounded-lg border-4 border-destructive px-4 py-2"
+              style={{ opacity: nopeOpacity }}
+            >
+              <span className="text-2xl font-bold text-destructive">NOPE</span>
+            </motion.div>
+          </>
+        )}
 
         {/* Product Image */}
         <div className="relative aspect-[3/4] overflow-hidden">
