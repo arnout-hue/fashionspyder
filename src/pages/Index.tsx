@@ -383,7 +383,7 @@ const Index = () => {
         competitors={competitors}
       />
 
-      <main className="container py-8">
+      <main className="container py-8 pb-24 md:pb-8">
         {currentView === "swipe" && (
           <DiscoverView
             products={pendingProducts}
