@@ -62,7 +62,7 @@ export const DiscoverView = ({
   return (
     <div className="mx-auto max-w-6xl">
       {/* Header with View Toggle */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 md:mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-3xl font-semibold">Discover</h1>
           <p className="mt-1 text-muted-foreground">
