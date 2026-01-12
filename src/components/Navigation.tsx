@@ -46,25 +46,25 @@ export const Navigation = ({
     {
       id: "swipe",
       label: "Discover",
-      icon: <Layers className="h-4 w-4" />,
+      icon: <Layers className="h-5 w-5" />,
       count: pendingCount,
     },
     {
       id: "positive",
       label: "Positive",
-      icon: <ThumbsUp className="h-4 w-4" />,
+      icon: <ThumbsUp className="h-5 w-5" />,
       count: positiveCount,
     },
     {
       id: "negative",
       label: "Negative",
-      icon: <ThumbsDown className="h-4 w-4" />,
+      icon: <ThumbsDown className="h-5 w-5" />,
       count: negativeCount,
     },
     {
       id: "suppliers",
       label: "Suppliers",
-      icon: <Package className="h-4 w-4" />,
+      icon: <Package className="h-5 w-5" />,
     },
   ];
 
@@ -89,50 +89,162 @@ export const Navigation = ({
   const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management";
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
-      <div className="container flex h-16 items-center justify-between">
-        {/* Logo */}
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="FashionSpyder" className="h-10 w-auto" />
+    <>
+      {/* Desktop Header */}
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
+        <div className="container flex h-16 items-center justify-between">
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="FashionSpyder" className="h-10 w-auto" />
+          </div>
+
+          {/* Desktop Nav Items */}
+          <nav className="hidden items-center gap-1 md:flex">
+            {mainNavItems.map((item) => (
+              <Button
+                key={item.id}
+                variant={currentView === item.id ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => onViewChange(item.id)}
+                className="gap-2"
+              >
+                {item.icon}
+                {item.label}
+                {item.count !== undefined && item.count > 0 && (
+                  <Badge
+                    variant={currentView === item.id ? "default" : "secondary"}
+                    className="ml-1 h-5 min-w-5 px-1.5"
+                  >
+                    {item.count}
+                  </Badge>
+                )}
+              </Button>
+            ))}
+            
+            {/* Settings Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={isSettingsView ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  Settings
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {settingsItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.id}
+                    onClick={() => onViewChange(item.id)}
+                    className="gap-2"
+                  >
+                    {item.icon}
+                    {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </nav>
+
+          {/* Filter and Logout */}
+          <div className="flex items-center gap-4">
+            <div className="hidden items-center gap-2 sm:flex">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedCompetitor} onValueChange={onCompetitorChange}>
+                <SelectTrigger className="h-9 w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {competitors.map((competitor) => (
+                    <SelectItem key={competitor} value={competitor}>
+                      {competitor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
+          </div>
         </div>
 
-        {/* Nav Items */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {mainNavItems.map((item) => (
-            <Button
-              key={item.id}
-              variant={currentView === item.id ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => onViewChange(item.id)}
-              className="gap-2"
-            >
-              {item.icon}
-              {item.label}
-              {item.count !== undefined && item.count > 0 && (
-                <Badge
-                  variant={currentView === item.id ? "default" : "secondary"}
-                  className="ml-1 h-5 min-w-5 px-1.5"
-                >
-                  {item.count}
-                </Badge>
-              )}
-            </Button>
-          ))}
+        {/* Mobile Filter Row */}
+        <div className="flex items-center justify-center gap-2 border-t px-4 py-2 md:hidden">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={selectedCompetitor} onValueChange={onCompetitorChange}>
+            <SelectTrigger className="h-9 flex-1 max-w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {competitors.map((competitor) => (
+                <SelectItem key={competitor} value={competitor}>
+                  {competitor}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </header>
+
+      {/* Mobile Bottom Navigation - Fixed at bottom */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-lg md:hidden safe-area-inset-bottom">
+        <div className="flex h-16">
+          {mainNavItems.map((item) => {
+            const isActive = currentView === item.id;
+            return (
+              <Button
+                key={item.id}
+                variant="ghost"
+                onClick={() => onViewChange(item.id)}
+                className={`flex-1 flex-col gap-1 rounded-none h-full px-1 ${
+                  isActive 
+                    ? "bg-primary/10 text-primary" 
+                    : "text-muted-foreground"
+                }`}
+              >
+                <div className="relative">
+                  {item.icon}
+                  {item.count !== undefined && item.count > 0 && (
+                    <span className="absolute -right-3 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground shadow-sm">
+                      {item.count > 99 ? "99+" : item.count}
+                    </span>
+                  )}
+                </div>
+                <span className={`text-[11px] font-medium ${isActive ? "text-primary" : ""}`}>
+                  {item.label}
+                </span>
+              </Button>
+            );
+          })}
           
-          {/* Settings Dropdown */}
+          {/* Settings in bottom nav */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant={isSettingsView ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-2"
+                variant="ghost"
+                className={`flex-1 flex-col gap-1 rounded-none h-full px-1 ${
+                  isSettingsView 
+                    ? "bg-primary/10 text-primary" 
+                    : "text-muted-foreground"
+                }`}
               >
-                <Settings className="h-4 w-4" />
-                Settings
-                <ChevronDown className="h-3 w-3" />
+                <Settings className="h-5 w-5" />
+                <span className={`text-[11px] font-medium ${isSettingsView ? "text-primary" : ""}`}>
+                  Settings
+                </span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" side="top" className="mb-2">
               {settingsItems.map((item) => (
                 <DropdownMenuItem
                   key={item.id}
@@ -145,88 +257,12 @@ export const Navigation = ({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        </nav>
-
-        {/* Filter and Logout */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedCompetitor} onValueChange={onCompetitorChange}>
-              <SelectTrigger className="h-9 w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {competitors.map((competitor) => (
-                  <SelectItem key={competitor} value={competitor}>
-                    {competitor}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={signOut}
-            className="gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </Button>
         </div>
-      </div>
-
-      {/* Mobile Nav */}
-      <nav className="flex border-t md:hidden">
-        {mainNavItems.map((item) => (
-          <Button
-            key={item.id}
-            variant="ghost"
-            size="sm"
-            onClick={() => onViewChange(item.id)}
-            className={`flex-1 flex-col gap-1 rounded-none py-3 ${
-              currentView === item.id ? "bg-accent text-accent-foreground" : ""
-            }`}
-          >
-            <div className="relative">
-              {item.icon}
-              {item.count !== undefined && item.count > 0 && (
-                <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
-                  {item.count}
-                </span>
-              )}
-            </div>
-            <span className="text-xs">{item.label}</span>
-          </Button>
-        ))}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`flex-1 flex-col gap-1 rounded-none py-3 ${
-                isSettingsView ? "bg-accent text-accent-foreground" : ""
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              <span className="text-xs">Settings</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {settingsItems.map((item) => (
-              <DropdownMenuItem
-                key={item.id}
-                onClick={() => onViewChange(item.id)}
-                className="gap-2"
-              >
-                {item.icon}
-                {item.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </nav>
-    </header>
+
+      {/* Spacer for mobile bottom nav */}
+      <div className="h-16 md:hidden" />
+    </>
   );
 };
 
