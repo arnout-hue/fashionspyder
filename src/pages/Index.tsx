@@ -8,7 +8,6 @@ import { CrawlManagement } from "@/components/CrawlManagement";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  mockSuppliers,
   Product,
   Supplier,
 } from "@/data/mockData";
@@ -19,7 +18,7 @@ const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
   const [products, setProducts] = useState<Product[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [competitors, setCompetitors] = useState<string[]>(["All"]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -58,6 +57,23 @@ const Index = () => {
     setIsLoading(false);
   }, []);
 
+  // Fetch suppliers from database
+  const fetchSuppliers = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('name');
+    
+    if (error) {
+      console.error('Error fetching suppliers:', error);
+      return;
+    }
+    
+    if (data) {
+      setSuppliers(data);
+    }
+  }, []);
+
   // Fetch competitors from database
   useEffect(() => {
     const fetchCompetitors = async () => {
@@ -73,7 +89,8 @@ const Index = () => {
     };
     fetchCompetitors();
     fetchProducts();
-  }, [fetchProducts]);
+    fetchSuppliers();
+  }, [fetchProducts, fetchSuppliers]);
 
   // Filter products by competitor
   const filteredProducts = useMemo(() => {
@@ -201,32 +218,70 @@ const Index = () => {
     );
   };
 
-  const handleAddSupplier = (supplier: Omit<Supplier, "id" | "created_at" | "updated_at">) => {
-    const newSupplier: Supplier = {
-      ...supplier,
-      id: `sup-${Date.now()}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setSuppliers((prev) => [...prev, newSupplier]);
+  const handleAddSupplier = async (supplier: Omit<Supplier, "id" | "created_at" | "updated_at">) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert(supplier)
+      .select()
+      .single();
+    
+    if (error) {
+      toast.error('Failed to add supplier');
+      console.error('Error adding supplier:', error);
+      return;
+    }
+    
+    if (data) {
+      setSuppliers((prev) => [...prev, data]);
+      toast.success('Supplier added');
+    }
   };
 
-  const handleUpdateSupplier = (id: string, updates: Partial<Supplier>) => {
+  const handleUpdateSupplier = async (id: string, updates: Partial<Supplier>) => {
+    const { error } = await supabase
+      .from('suppliers')
+      .update(updates)
+      .eq('id', id);
+    
+    if (error) {
+      toast.error('Failed to update supplier');
+      console.error('Error updating supplier:', error);
+      return;
+    }
+    
     setSuppliers((prev) =>
       prev.map((s) =>
         s.id === id ? { ...s, ...updates, updated_at: new Date().toISOString() } : s
       )
     );
+    toast.success('Supplier updated');
   };
 
-  const handleDeleteSupplier = (id: string) => {
+  const handleDeleteSupplier = async (id: string) => {
+    // First unassign products from this supplier
+    await supabase
+      .from('products')
+      .update({ supplier_id: null })
+      .eq('supplier_id', id);
+    
+    const { error } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      toast.error('Failed to delete supplier');
+      console.error('Error deleting supplier:', error);
+      return;
+    }
+    
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
-    // Unassign products from deleted supplier
     setProducts((prev) =>
       prev.map((p) =>
         p.supplier_id === id ? { ...p, supplier_id: null } : p
       )
     );
+    toast.success('Supplier deleted');
   };
 
   const handleSendRequest = (supplierId: string) => {
