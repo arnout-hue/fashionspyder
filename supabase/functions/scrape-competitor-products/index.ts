@@ -239,13 +239,17 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch competitor from database
+    let competitorConfig: CompetitorConfig | null = null;
+    
     const { data: competitorData, error: competitorError } = await supabase
       .from('competitors')
       .select('*')
       .eq('id', competitor)
       .single();
 
-    if (competitorError || !competitorData) {
+    if (!competitorError && competitorData) {
+      competitorConfig = competitorData;
+    } else {
       console.log('Competitor not found by ID, trying by name...');
       // Fallback to name-based lookup for backwards compatibility
       const { data: competitorByName, error: nameError } = await supabase
@@ -254,20 +258,21 @@ Deno.serve(async (req) => {
         .ilike('name', competitor)
         .single();
 
-      if (nameError || !competitorByName) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Competitor not found: ${competitor}` 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (!nameError && competitorByName) {
+        competitorConfig = competitorByName;
       }
-      
-      Object.assign(competitorData || {}, competitorByName);
     }
 
-    const competitorConfig: CompetitorConfig = competitorData;
+    if (!competitorConfig) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Competitor not found: ${competitor}` 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log(`[v3] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
     // Step 1: Scrape the listing page to extract product links

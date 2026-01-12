@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
-import { Globe, Loader2, Play, CheckCircle2, XCircle, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2 } from 'lucide-react';
+import { Globe, Loader2, Play, CheckCircle2, XCircle, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save } from 'lucide-react';
 
 // URL validation helper
 function isValidHttpUrl(url: string): boolean {
@@ -64,6 +64,10 @@ export const CrawlManagement = () => {
   const [crawlStatuses, setCrawlStatuses] = useState<Record<string, CrawlStatus>>({});
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
+  const [isBulkCrawling, setIsBulkCrawling] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+  const [isEditingGlobalFilters, setIsEditingGlobalFilters] = useState(false);
+  const [globalExcludedCategories, setGlobalExcludedCategories] = useState(DEFAULT_EXCLUDED_CATEGORIES.join(', '));
   
   // Form state
   const [formData, setFormData] = useState({
@@ -315,6 +319,101 @@ export const CrawlManagement = () => {
     }
   };
 
+  const handleBulkCrawl = async () => {
+    const activeCompetitors = competitors.filter(c => c.is_active);
+    if (activeCompetitors.length === 0) {
+      toast({
+        title: 'No competitors',
+        description: 'No active competitors to crawl',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsBulkCrawling(true);
+    setBulkProgress({ current: 0, total: activeCompetitors.length });
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < activeCompetitors.length; i++) {
+      const competitor = activeCompetitors[i];
+      setBulkProgress({ current: i + 1, total: activeCompetitors.length });
+      
+      setCrawlStatuses((prev) => ({
+        ...prev,
+        [competitor.name]: { competitor: competitor.name, status: 'crawling' },
+      }));
+
+      try {
+        const response = await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+
+        if (response.success && response.data) {
+          setCrawlStatuses((prev) => ({
+            ...prev,
+            [competitor.name]: {
+              competitor: competitor.name,
+              status: 'success',
+              message: `Found ${response.data.scrapedCount} new products`,
+              results: response.data,
+            },
+          }));
+          successCount++;
+        } else {
+          throw new Error(response.error || 'Failed to crawl');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
+        setCrawlStatuses((prev) => ({
+          ...prev,
+          [competitor.name]: {
+            competitor: competitor.name,
+            status: 'error',
+            message: errorMessage,
+          },
+        }));
+        errorCount++;
+      }
+
+      // Wait 3 seconds between crawls to avoid rate limiting
+      if (i < activeCompetitors.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+
+    setIsBulkCrawling(false);
+    fetchCompetitors();
+
+    toast({
+      title: 'Bulk Crawl Complete',
+      description: `${successCount} succeeded, ${errorCount} failed`,
+    });
+  };
+
+  const handleApplyGlobalFilters = async () => {
+    const categories = globalExcludedCategories.split(',').map(c => c.trim()).filter(Boolean);
+    
+    const { error } = await supabase
+      .from('competitors')
+      .update({ excluded_categories: categories })
+      .neq('id', ''); // Update all
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update category filters',
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Success',
+        description: `Applied category filters to all ${competitors.length} competitors`,
+      });
+      setIsEditingGlobalFilters(false);
+      fetchCompetitors();
+    }
+  };
+
   const getStatusBadge = (status: CrawlStatus['status']) => {
     switch (status) {
       case 'crawling':
@@ -428,31 +527,51 @@ export const CrawlManagement = () => {
           </p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Competitor
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add New Competitor</DialogTitle>
-              <DialogDescription>
-                Add a new competitor to track their new arrivals
-              </DialogDescription>
-            </DialogHeader>
-            <CompetitorFormContent />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddCompetitor} disabled={!formData.name || !formData.scrape_url}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleBulkCrawl}
+            disabled={isBulkCrawling || competitors.length === 0}
+          >
+            {isBulkCrawling ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Crawling {bulkProgress.current}/{bulkProgress.total}
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Crawl All
+              </>
+            )}
+          </Button>
+          
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { resetForm(); setIsAddDialogOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" />
                 Add Competitor
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Add New Competitor</DialogTitle>
+                <DialogDescription>
+                  Add a new competitor to track their new arrivals
+                </DialogDescription>
+              </DialogHeader>
+              <CompetitorFormContent />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddCompetitor} disabled={!formData.name || !formData.scrape_url}>
+                  Add Competitor
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Edit Dialog */}
@@ -616,7 +735,7 @@ export const CrawlManagement = () => {
 
                   <Button
                     onClick={() => handleCrawl(competitor)}
-                    disabled={isCrawling}
+                    disabled={isCrawling || isBulkCrawling}
                     className="w-full"
                     variant={status?.status === 'success' ? 'outline' : 'default'}
                   >
@@ -646,21 +765,53 @@ export const CrawlManagement = () => {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Category Filters</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>Global Category Filters</CardTitle>
+            </div>
+            {!isEditingGlobalFilters && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditingGlobalFilters(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+            )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            Each competitor can have its own excluded categories. Products containing these words in their URL or name will be automatically filtered out during scraping.
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Products containing these keywords in their URL or name will be automatically filtered out during scraping.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {DEFAULT_EXCLUDED_CATEGORIES.slice(0, 10).map((cat) => (
-              <Badge key={cat} variant="secondary">{cat}</Badge>
-            ))}
-            <Badge variant="outline">+{DEFAULT_EXCLUDED_CATEGORIES.length - 10} more</Badge>
-          </div>
+          
+          {isEditingGlobalFilters ? (
+            <div className="space-y-4">
+              <Textarea
+                value={globalExcludedCategories}
+                onChange={(e) => setGlobalExcludedCategories(e.target.value)}
+                placeholder="accessories, bags, belts, earrings..."
+                rows={4}
+                className="font-mono text-sm"
+              />
+              <div className="flex items-center gap-2">
+                <Button onClick={handleApplyGlobalFilters}>
+                  <Save className="mr-2 h-4 w-4" />
+                  Apply to All Competitors
+                </Button>
+                <Button variant="outline" onClick={() => setIsEditingGlobalFilters(false)}>
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This will update the excluded categories for all {competitors.length} competitors.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {DEFAULT_EXCLUDED_CATEGORIES.map((cat) => (
+                <Badge key={cat} variant="secondary">{cat}</Badge>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
