@@ -15,79 +15,80 @@ interface CompetitorConfig {
   excluded_categories: string[];
 }
 
-function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean {
-  // First check if custom patterns are defined - use them exclusively
-  if (patterns && patterns.length > 0) {
-    return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
-  }
-
-  // Exclude common non-product patterns
-  const excludePatterns = [
-    /\/collections?\/?$/i,
-    /\/categor(y|ies)/i,
-    /\/nieuw\/?$/i,
-    /\/new\/?$/i,
-    /\/new-arrivals\/?$/i,
-    /\/newarrivals\/?$/i,
-    /\/shop\/?$/i,
-    /\/kleding/i,
-    /\/page\/\d+/i,
-    /\?.*page=/i,
-    /\/cart/i,
-    /\/checkout/i,
-    /\/account/i,
-    /\/login/i,
-    /\/wishlist/i,
-    /\/search/i,
-    /\/filter/i,
-    /\/sort/i,
-    /\/week-\d+/i,
-    /\/privacy/i,
-    /\/terms/i,
-    /\/faq/i,
-    /\/contact/i,
-    /\/about/i,
-    /\/sale\/?$/i,
-    /\/party\/?$/i,
-    /\/back-in-stock/i,
-    /\/accessoires/i,
-    /\/schoenen/i,
-    /\/tassen/i,
-    /\/giftcard/i,
-    /\/campagnes/i,
-    /\/trends\/?$/i,
-    /\/lookbook/i,
-    /\/brand/i,
-    /\/info/i,
-    /\/customer/i,
-    /\/returns/i,
-    /\/shipping/i,
-    /#.*/i,
-    /\?.*$/i,
-  ];
-
-  // Exclude the base URL itself and homepage
+function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): boolean {
   try {
     const urlObj = new URL(url);
-    if (urlObj.pathname === '/' || urlObj.pathname === '' || urlObj.pathname === '/nl/' || urlObj.pathname === '/nl') return false;
+    const path = urlObj.pathname.toLowerCase();
+    
+    // Exclude homepage and very short paths
+    if (path === '/' || path === '/nl/' || path === '/nl' || path.length < 5) {
+      return false;
+    }
+    
+    // If custom patterns are defined, use them exclusively
+    if (patterns && patterns.length > 0) {
+      return patterns.some((pattern) => path.includes(pattern.toLowerCase()));
+    }
+    
+    // List of known non-product path segments
+    const nonProductSegments = [
+      'collections', 'collection', 'category', 'categories',
+      'nieuw', 'new', 'new-arrivals', 'newarrivals',
+      'shop', 'kleding', 'clothing', 'dames', 'heren',
+      'cart', 'checkout', 'account', 'login', 'wishlist',
+      'search', 'filter', 'sort', 'page',
+      'sale', 'party', 'back-in-stock', 'bestsellers',
+      'accessoires', 'accessories', 'schoenen', 'shoes', 'tassen', 'bags',
+      'giftcard', 'gift-card', 'campagnes', 'campaigns',
+      'trends', 'lookbook', 'brand', 'brands',
+      'info', 'customer', 'returns', 'shipping',
+      'privacy', 'terms', 'faq', 'contact', 'about',
+      'blog', 'news', 'magazine', 'inspiratie'
+    ];
+    
+    // Check if path contains any non-product segment
+    const pathSegments = path.split('/').filter(Boolean);
+    
+    // Most category pages have 1-2 segments: /kleding/ or /kleding/jurken/
+    // Product pages typically have a unique identifier
+    const lastSegment = pathSegments[pathSegments.length - 1] || '';
+    
+    // Check if any segment is a known non-product segment
+    for (const segment of pathSegments) {
+      if (nonProductSegments.includes(segment)) {
+        return false;
+      }
+    }
+    
+    // Product URLs typically contain:
+    // 1. A numeric product ID: /29579330906-vesten-bruin/
+    // 2. A "products" or "p" path: /products/my-product or /p/12345
+    // 3. HTML extension: /product-name.html
+    
+    // Check for numeric ID pattern (5+ digits followed by dash and text)
+    if (/^\d{5,}-/.test(lastSegment)) {
+      return true;
+    }
+    
+    // Check for products path
+    if (pathSegments.includes('products') || pathSegments.includes('product') || pathSegments.includes('p')) {
+      return true;
+    }
+    
+    // Check for .html extension with product-like slug
+    if (lastSegment.endsWith('.html') && lastSegment.length > 10) {
+      return true;
+    }
+    
+    // Check for item/artikel paths
+    if (pathSegments.includes('item') || pathSegments.includes('artikel')) {
+      return true;
+    }
+    
+    return false;
   } catch {
     return false;
   }
-
-  if (excludePatterns.some((pattern) => pattern.test(url))) {
-    return false;
-  }
-
-  // Look for product IDs in URLs - most e-commerce sites use numeric IDs
-  const productPatterns = [
-    /\/\d{5,}-[a-z-]+/i, // Numeric ID followed by slug (Loavies: /29579330906-vesten-bruin/)
-    /\/product[s]?\/[^\/]+$/i,
-    /\/p\/[^\/]+$/i,
-    /\/item\/[^\/]+$/i,
-    /\/artikel\/[^\/]+$/i,
-  ];
-
-  return productPatterns.some((pattern) => pattern.test(url));
 }
 
 function shouldExcludeProduct(url: string, name: string, excludedCategories: string[]): boolean {
@@ -228,7 +229,7 @@ Deno.serve(async (req) => {
     }
 
     const competitorConfig: CompetitorConfig = competitorData;
-    console.log(`Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
+    console.log(`[v3] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
 // Step 1: Scrape the listing page to extract product links
     console.log('Scraping listing page for product links...');
