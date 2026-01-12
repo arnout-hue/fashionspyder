@@ -92,6 +92,56 @@ export type Database = {
         }
         Relationships: []
       }
+      crawl_history: {
+        Row: {
+          competitor_id: string
+          crawled_at: string
+          created_at: string
+          error_message: string | null
+          errors_count: number
+          id: string
+          new_products_scraped: number
+          product_urls_found: number
+          skipped_count: number
+          status: string
+          total_urls_found: number
+        }
+        Insert: {
+          competitor_id: string
+          crawled_at?: string
+          created_at?: string
+          error_message?: string | null
+          errors_count?: number
+          id?: string
+          new_products_scraped?: number
+          product_urls_found?: number
+          skipped_count?: number
+          status?: string
+          total_urls_found?: number
+        }
+        Update: {
+          competitor_id?: string
+          crawled_at?: string
+          created_at?: string
+          error_message?: string | null
+          errors_count?: number
+          id?: string
+          new_products_scraped?: number
+          product_urls_found?: number
+          skipped_count?: number
+          status?: string
+          total_urls_found?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crawl_history_competitor_id_fkey"
+            columns: ["competitor_id"]
+            isOneToOne: false
+            referencedRelation: "competitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           competitor: string
