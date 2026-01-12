@@ -143,6 +143,44 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
   }
 }
 
+/**
+ * Extracts a normalized "base product key" from a URL.
+ * This is used to deduplicate size/color variants of the same product.
+ * E.g., https://www.tessv.nl/lize-jurk-lila/264070-Lila-M.html → "264070"
+ *       https://www.tessv.nl/lize-jurk-lila/264070-Lila-S.html → "264070"
+ */
+function getProductBaseKey(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const path = urlObj.pathname.toLowerCase();
+
+    // Shopware-style: /product-slug/123456-Color-Size.html → extract the numeric ID
+    const shopwareMatch = path.match(/\/(\d{5,})-[^/]+\.html$/);
+    if (shopwareMatch) {
+      return shopwareMatch[1];
+    }
+
+    // Shopify-style: /products/product-handle → use the handle
+    const shopifyMatch = path.match(/\/products\/([^/?#]+)/);
+    if (shopifyMatch) {
+      return shopifyMatch[1];
+    }
+
+    // Generic numeric ID in last segment: /29579330906-vesten-bruin/ → extract numeric prefix
+    const segments = path.split('/').filter(Boolean);
+    const lastSeg = segments[segments.length - 1] || '';
+    const numericMatch = lastSeg.match(/^(\d{5,})/);
+    if (numericMatch) {
+      return numericMatch[1];
+    }
+
+    // Fallback: use the full URL as the key (no deduplication)
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 function extractUrlsFromMarkdown(markdown: string): string[] {
   const urls: string[] = [];
 
@@ -477,14 +515,31 @@ Deno.serve(async (req) => {
       console.log('[debug] Patterns:', competitorConfig.product_url_patterns);
     }
 
+    // Step 2b: Deduplicate product URLs by base product key (ignore size/color variants)
+    const seenBaseKeys = new Set<string>();
+    const uniqueProductUrls: string[] = [];
+    for (const url of productUrls) {
+      const baseKey = getProductBaseKey(url);
+      if (!seenBaseKeys.has(baseKey)) {
+        seenBaseKeys.add(baseKey);
+        uniqueProductUrls.push(url);
+      }
+    }
+    console.log(`${uniqueProductUrls.length} unique products after deduplicating size variants`);
+
     // Step 3: Get existing product URLs to avoid duplicates
     const { data: existingProducts } = await supabase
       .from('products')
       .select('product_url')
       .eq('competitor', competitorConfig.name);
 
-    const existingUrls = new Set(existingProducts?.map((p) => p.product_url) || []);
-    const newProductUrls = productUrls.filter((url) => !existingUrls.has(url));
+    // Build a set of existing base keys for comparison
+    const existingBaseKeys = new Set(
+      (existingProducts || []).map((p) => getProductBaseKey(p.product_url))
+    );
+    const newProductUrls = uniqueProductUrls.filter(
+      (url) => !existingBaseKeys.has(getProductBaseKey(url))
+    );
     console.log(`${newProductUrls.length} new product URLs to scrape`);
 
     // Step 4: Scrape new products (limited)
@@ -557,6 +612,7 @@ Deno.serve(async (req) => {
           competitor: competitorConfig.name,
           totalUrlsFound: allUrls.length,
           productUrlsFound: productUrls.length,
+          uniqueProductsFound: uniqueProductUrls.length,
           newProductUrls: newProductUrls.length,
           scrapedCount: scrapedProducts.length,
           skippedCount: skippedProducts.length,
