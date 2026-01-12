@@ -150,11 +150,5 @@ export const mockProducts: Product[] = [
   },
 ];
 
-export const competitors = [
-  "All",
-  "Loavies",
-  "My Jewellery",
-  "Tess V",
-  "Most Wanted",
-  "Olivia Kate",
-];
+// Legacy export for backwards compatibility - now fetched from database
+export const competitors = ["All"];
