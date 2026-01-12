@@ -134,8 +134,8 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
       },
       body: JSON.stringify({
         url,
-        formats: ['markdown'],
-        onlyMainContent: true,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false, // Get full page to find images
       }),
     });
 
@@ -147,12 +147,37 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
 
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || '';
+    const html = data.data?.html || data.html || '';
     const metadata = data.data?.metadata || data.metadata || {};
 
-    // Extract product info from metadata and markdown
+    // Extract product info from metadata and content
     const name = metadata.title || extractFromMarkdown(markdown, /^#\s+(.+)/m) || 'Unknown Product';
-    const price = extractPrice(markdown) || null;
-    const image = metadata.ogImage || extractImage(markdown) || null;
+    const price = extractPrice(markdown) || extractPrice(html) || null;
+    
+    // Try multiple image extraction methods
+    let image = null;
+    
+    // 1. OG Image from metadata (most reliable)
+    if (metadata.ogImage && isValidImageUrl(metadata.ogImage)) {
+      image = metadata.ogImage;
+    }
+    
+    // 2. Try to find product image in JSON-LD schema
+    if (!image) {
+      image = extractImageFromJsonLd(html);
+    }
+    
+    // 3. Look for product images in HTML (img tags with product-related classes/src)
+    if (!image) {
+      image = extractProductImage(html);
+    }
+    
+    // 4. Fall back to markdown image extraction
+    if (!image) {
+      image = extractImage(markdown);
+    }
+
+    console.log(`Extracted: name="${cleanProductName(name)}", price="${price}", image="${image ? 'found' : 'not found'}"`);
 
     return {
       name: cleanProductName(name),
@@ -164,6 +189,72 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
     console.error('Error in scrapeProductPage:', error);
     return null;
   }
+}
+
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  // Must be an actual image URL, not another HTML page
+  return (
+    (lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.png') || 
+     lower.includes('.webp') || lower.includes('.gif') || lower.includes('/image') ||
+     lower.includes('cdn') || lower.includes('media')) &&
+    !lower.endsWith('.html')
+  );
+}
+
+function extractImageFromJsonLd(html: string): string | null {
+  // Look for JSON-LD product schema
+  const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  if (jsonLdMatch) {
+    for (const match of jsonLdMatch) {
+      try {
+        const jsonContent = match.replace(/<script[^>]*>|<\/script>/gi, '');
+        const parsed = JSON.parse(jsonContent);
+        
+        // Handle array of schemas
+        const schemas = Array.isArray(parsed) ? parsed : [parsed];
+        for (const schema of schemas) {
+          if (schema['@type'] === 'Product' && schema.image) {
+            const img = Array.isArray(schema.image) ? schema.image[0] : schema.image;
+            if (typeof img === 'string' && isValidImageUrl(img)) return img;
+            if (img?.url && isValidImageUrl(img.url)) return img.url;
+          }
+        }
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+  }
+  return null;
+}
+
+function extractProductImage(html: string): string | null {
+  // Look for common product image patterns in HTML
+  const patterns = [
+    // Look for large product images
+    /<img[^>]*class=["'][^"']*(?:product|main|primary|hero|gallery)[^"']*["'][^>]*src=["']([^"']+)["']/gi,
+    // Look for data-src (lazy loaded)
+    /<img[^>]*data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+    // Look for srcset
+    /<img[^>]*srcset=["']([^"'\s,]+)/gi,
+    // Generic img with product in path
+    /<img[^>]*src=["']([^"']*(?:product|media|image)[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = pattern.exec(html);
+    if (match && match[1] && isValidImageUrl(match[1])) {
+      let imageUrl = match[1];
+      // Handle relative URLs
+      if (imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
+      }
+      return imageUrl;
+    }
+  }
+  
+  return null;
 }
 
 function extractFromMarkdown(markdown: string, pattern: RegExp): string | null {
