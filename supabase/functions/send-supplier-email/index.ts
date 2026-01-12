@@ -1,4 +1,4 @@
-import { Resend } from "npm:resend@2.0.0";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     console.log(`Sending email to ${supplierEmail} with ${products.length} products`);
 
     const emailResponse = await resend.emails.send({
-      from: "FashionSpyder <onboarding@resend.dev>",
+      from: "FashionSpyder <spidey@fashionspyder.nl>",
       to: [supplierEmail],
       subject: `Product Inquiry - ${products.length} items`,
       html: emailHtml,
