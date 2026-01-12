@@ -1,4 +1,4 @@
-// Competitor product scraper - v5 with batch extraction
+// Competitor product scraper - v6 with LLM-based JSON extraction
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -15,29 +15,82 @@ interface CompetitorConfig {
   excluded_categories: string[];
 }
 
+interface ExtractedProduct {
+  name: string;
+  price: string | null;
+  image_url: string | null;
+}
+
+// Phase 2: Improved product URL detection with stricter checks
 function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): boolean {
   try {
-    // Firecrawl "links" can include relative URLs (e.g. "/nl/kleding/..."),
-    // so always resolve against the competitor listing URL.
     const urlObj = new URL(url, baseUrl);
     const path = urlObj.pathname.toLowerCase();
+    const fullUrl = urlObj.href.toLowerCase();
 
-    // Heuristic: some shops (e.g. Tess V / Shopware) use .html product pages.
-    // If it looks like a product detail URL, treat it as product even when custom patterns are set.
-    if (path.endsWith('.html') && /\/\d{5,}-[^/]+\.html$/.test(path)) {
-      return true;
-    }
-    
     // Exclude homepage and very short paths
     if (path === '/' || path === '/nl/' || path === '/nl' || path.length < 5) {
       return false;
     }
-    
+
+    // STRICT: Exclude utility/info pages
+    const strictNonProductPatterns = [
+      '/cart', '/checkout', '/account', '/login', '/wishlist', '/register',
+      '/search', '/filter', '/sort', '/page/', '/pagina/',
+      '/giftcard', '/gift-card', '/cadeaubon',
+      '/info/', '/customer/', '/returns/', '/shipping/', '/verzending/',
+      '/privacy', '/terms', '/faq', '/contact', '/about', '/over-ons',
+      '/blog/', '/news/', '/magazine/', '/inspiratie/', '/lookbook/',
+      '/levering/', '/bestellen/', '/retourneren/', '/ruilen/',
+      '/cookiebeleid', '/privacyverklaring', '/algemene-voorwaarden',
+      '/customer-care', '/customer-service', '/klantenservice',
+      '/brands/', '/brand/', '/merken/', '/merk/',
+      '/stores/', '/store/', '/winkels/', '/winkel/',
+      '/size-guide', '/maattabel', '/sizeguide',
+      '/affiliate', '/ambassador', '/partner',
+      '.pdf', '/pdf/', '/downloads/'
+    ];
+
+    for (const pattern of strictNonProductPatterns) {
+      if (path.includes(pattern) || path.endsWith(pattern.replace('/', ''))) {
+        return false;
+      }
+    }
+
+    // STRICT: Exclude category pages that have numeric IDs like /20-tops/ or /en/20-tops-and-t-shirts
+    // These are PrestaShop category patterns
+    const categoryNumericPattern = /\/\d{1,3}-[^/]+\/?$/;
+    if (categoryNumericPattern.test(path)) {
+      return false;
+    }
+
+    // STRICT: Exclude pure category/collection pages
+    const categoryPatterns = [
+      /\/collections\/[^/]+\/?$/,
+      /\/category\/[^/]+\/?$/,
+      /\/categorie\/[^/]+\/?$/,
+      /\/categories\/[^/]+\/?$/,
+      /\/c\/[^/]+\/?$/,
+      /\/shop\/?$/,
+      /\/nieuw\/?$/,
+      /\/new\/?$/,
+      /\/sale\/?$/,
+      /\/kleding\/?$/,
+      /\/clothing\/?$/,
+      /\/accessoires\/?$/,
+      /\/accessories\/?$/,
+    ];
+
+    for (const pattern of categoryPatterns) {
+      if (pattern.test(path)) {
+        return false;
+      }
+    }
+
     // If custom patterns are defined, use them
     if (patterns && patterns.length > 0) {
       const matchesPattern = patterns.some((pattern) => {
         const lowerPattern = pattern.toLowerCase();
-        // Support regex patterns (starts with ^)
         if (lowerPattern.startsWith('^')) {
           try {
             const regex = new RegExp(lowerPattern);
@@ -48,92 +101,49 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
         }
         return path.includes(lowerPattern);
       });
-      
-      if (!matchesPattern) return false;
-    }
-    
-    // If custom patterns are specified and matched, skip non-product pattern checks
-    // This allows specific patterns like /nl/kleding/ to work without being filtered
-    if (patterns && patterns.length > 0) {
-      // Only check for truly non-product paths (cart, account, etc.)
-      const strictNonProductPatterns = [
-        '/cart', '/checkout', '/account', '/login', '/wishlist',
-        '/search', '/filter', '/sort', '/page/',
-        '/giftcard', '/gift-card',
-        '/info/', '/customer/', '/returns/', '/shipping/',
-        '/privacy', '/terms', '/faq', '/contact', '/about',
-        '/blog/', '/news/', '/magazine/', '/inspiratie/',
-        '/levering/', '/bestellen/', '/retourneren/',
-        '/cookiebeleid', '/privacyverklaring'
-      ];
-      
-      for (const pattern of strictNonProductPatterns) {
-        if (path.includes(pattern) || path.endsWith(pattern.slice(0, -1))) {
-          return false;
-        }
-      }
-      
-      // Patterns matched and not strictly excluded - it's a product
-      return true;
-    }
 
-    // List of known non-product path patterns (for auto-detection without custom patterns)
-    const nonProductPatterns = [
-      '/collections/', '/collection/', '/category/', '/categories/',
-      '/nieuw/', '/new/', '/new-arrivals/', '/newarrivals/',
-      '/shop/', '/kleding/', '/clothing/', '/dames/', '/heren/',
-      '/cart', '/checkout', '/account', '/login', '/wishlist',
-      '/search', '/filter', '/sort', '/page/',
-      '/sale/', '/party/', '/back-in-stock/', '/bestsellers/',
-      '/accessoires/', '/accessories/', '/schoenen/', '/shoes/', '/tassen/', '/bags/',
-      '/giftcard', '/gift-card', '/campagnes/', '/campaigns/',
-      '/trends/', '/lookbook/', '/brand/', '/brands/',
-      '/info/', '/customer/', '/returns/', '/shipping/',
-      '/privacy', '/terms', '/faq', '/contact', '/about',
-      '/blog/', '/news/', '/magazine/', '/inspiratie/',
-      '/selected/', '/petite/', '/tall/', '/gift-guide/',
-      '/pre-order/', '/promo/', '/levering/', '/bestellen/', '/retourneren/',
-      '/cookiebeleid', '/privacyverklaring'
-    ];
-    
-    // Check if path matches any non-product pattern
-    for (const pattern of nonProductPatterns) {
-      if (path.includes(pattern) || path.endsWith(pattern.slice(0, -1))) {
-        return false;
+      // Custom patterns matched - it's likely a product
+      if (matchesPattern) {
+        return true;
       }
     }
 
-    // Exclude paths that end with just /collections/something (category pages)
-    if (/\/collections\/[^/]+\/?$/.test(path) && !path.includes('/products/')) {
-      return false;
-    }
-
-    // Product URLs typically contain:
-    // 1. Shopify products path: /products/product-name
+    // Product URL indicators (positive matches)
+    
+    // 1. Shopify: /products/product-handle
     if (path.includes('/products/') && !path.endsWith('/products/') && !path.endsWith('/products')) {
       return true;
     }
 
-    // 2. A numeric product ID: /29579330906-vesten-bruin/
+    // 2. Shopware/PrestaShop: /123456-product-name.html with 5+ digit ID
+    if (/\/\d{5,}-[^/]+\.html$/.test(path)) {
+      return true;
+    }
+
+    // 3. Generic .html with long slug (likely product detail)
     const pathSegments = path.split('/').filter(Boolean);
     const lastSegment = pathSegments[pathSegments.length - 1] || '';
+    if (lastSegment.endsWith('.html') && lastSegment.length > 15) {
+      return true;
+    }
 
+    // 4. Numeric product ID prefix: /29579330906-vesten-bruin/
     if (/^\d{5,}-/.test(lastSegment)) {
       return true;
     }
 
-    // 3. Product/p path segments
-    if (pathSegments.includes('product') || pathSegments.includes('p')) {
+    // 5. /product/ or /p/ path segments
+    if (pathSegments.includes('product') || (pathSegments.includes('p') && pathSegments.length > 2)) {
       return true;
     }
 
-    // 4. HTML extension with product-like slug
-    if (lastSegment.endsWith('.html') && lastSegment.length > 10) {
-      return true;
-    }
-
-    // 5. Item/artikel paths
+    // 6. /item/ or /artikel/ paths
     if (pathSegments.includes('item') || pathSegments.includes('artikel')) {
+      return true;
+    }
+
+    // 7. WooCommerce-style: /product-category/.../product-name where last segment is long
+    if (lastSegment.length > 20 && !lastSegment.includes('-category') && pathSegments.length >= 3) {
       return true;
     }
 
@@ -143,31 +153,28 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
   }
 }
 
-/**
- * Extracts a normalized "base product key" from a URL.
- * This is used to deduplicate size/color variants of the same product.
- * E.g., https://www.tessv.nl/lize-jurk-lila/264070-Lila-M.html → "264070"
- *       https://www.tessv.nl/lize-jurk-lila/264070-Lila-S.html → "264070"
- */
+// Phase 6: Enhanced deduplication with color/variant handling
 function getProductBaseKey(url: string): string {
   try {
     const urlObj = new URL(url);
-    // Strip query parameters (like ?variant=123) to normalize the URL
-    const path = urlObj.pathname.toLowerCase();
+    let path = urlObj.pathname.toLowerCase();
 
-    // Shopware-style: /product-slug/123456-Color-Size.html → extract the numeric ID
+    // Strip query parameters first
+    // But extract the base product if variant info is in query
+    
+    // Shopware-style: /product-slug/123456-Color-Size.html → extract numeric ID
     const shopwareMatch = path.match(/\/(\d{5,})-[^/]+\.html$/);
     if (shopwareMatch) {
       return shopwareMatch[1];
     }
 
-    // Shopify-style: /products/product-handle → use the handle (ignoring ?variant=)
+    // Shopify-style: /products/product-handle → use the handle
     const shopifyMatch = path.match(/\/products\/([^/?#]+)/);
     if (shopifyMatch) {
       return shopifyMatch[1];
     }
 
-    // Generic numeric ID in last segment: /29579330906-vesten-bruin/ → extract numeric prefix
+    // Generic numeric ID in last segment
     const segments = path.split('/').filter(Boolean);
     const lastSeg = segments[segments.length - 1] || '';
     const numericMatch = lastSeg.match(/^(\d{5,})/);
@@ -175,96 +182,122 @@ function getProductBaseKey(url: string): string {
       return numericMatch[1];
     }
 
-    // Fallback: use pathname only (strip query params) to help deduplication
+    // Remove common variant suffixes from path
+    path = path
+      .replace(/-(?:xs|s|m|l|xl|xxl|xxxl|one-size)(?:\.html)?$/i, '')
+      .replace(/-(?:small|medium|large|extra-large)(?:\.html)?$/i, '')
+      .replace(/-\d{2,3}(?:\.html)?$/i, '') // Size numbers like -36, -42
+      .replace(/\?.*$/, ''); // Remove query string
+
     return path;
   } catch {
     return url;
   }
 }
 
-function extractUrlsFromMarkdown(markdown: string): string[] {
-  const urls: string[] = [];
-
-  // Match markdown links: [text](url)
-  const linkRe = /\((https?:\/\/[^)\s]+)\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = linkRe.exec(markdown)) !== null) {
-    urls.push(m[1]);
-  }
-
-  // Match any bare URLs
-  const bareRe = /(https?:\/\/[^\s)\]}>"]+)/g;
-  while ((m = bareRe.exec(markdown)) !== null) {
-    urls.push(m[1]);
-  }
-
-  return Array.from(new Set(urls));
-}
-
 function shouldExcludeProduct(url: string, name: string, excludedCategories: string[]): boolean {
   if (!excludedCategories || excludedCategories.length === 0) return false;
-  
   const searchText = `${url} ${name}`.toLowerCase();
   return excludedCategories.some((cat) => searchText.includes(cat.toLowerCase()));
 }
 
-// Pre-filter URLs by excluded categories before scraping
 function shouldExcludeUrl(url: string, excludedCategories: string[]): boolean {
   if (!excludedCategories || excludedCategories.length === 0) return false;
-  
   const urlLower = url.toLowerCase();
   return excludedCategories.some((cat) => urlLower.includes(cat.toLowerCase()));
 }
 
-// Batch extract products using Firecrawl's extract endpoint
-async function batchExtractProducts(urls: string[], apiKey: string): Promise<any[]> {
-  console.log(`Batch extracting ${urls.length} products...`);
-  
-  try {
-    const response = await fetch('https://api.firecrawl.dev/v1/extract', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        urls,
-        prompt: 'Extract product information from this page',
-        schema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Product name/title' },
-            price: { type: 'string', description: 'Product price including currency symbol' },
-            image_url: { type: 'string', description: 'Main product image URL' },
-          },
-          required: ['name'],
-        },
-        enableWebSearch: false,
-      }),
-    });
+// Phase 5: Robust image URL validation and cleaning
+function cleanImageUrl(imageUrl: string | null | undefined, baseUrl: string): string | null {
+  if (!imageUrl || typeof imageUrl !== 'string') return null;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Batch extract API error:', response.status, errorText);
-      return [];
+  let cleaned = imageUrl.trim();
+
+  // Handle malformed double-domain URLs like "https://site.comhttps://cdn.site.com/..."
+  const doubleHttpMatch = cleaned.match(/https?:\/\/[^/]+?(https?:\/\/.+)/i);
+  if (doubleHttpMatch) {
+    cleaned = doubleHttpMatch[1];
+  }
+
+  // Handle protocol-relative URLs
+  if (cleaned.startsWith('//')) {
+    cleaned = 'https:' + cleaned;
+  }
+
+  // Handle relative URLs
+  if (cleaned.startsWith('/') && !cleaned.startsWith('//')) {
+    try {
+      const base = new URL(baseUrl);
+      cleaned = base.origin + cleaned;
+    } catch {
+      return null;
+    }
+  }
+
+  // Validate it's actually a URL
+  try {
+    const urlObj = new URL(cleaned);
+    
+    // Must be http(s)
+    if (!urlObj.protocol.startsWith('http')) {
+      return null;
     }
 
-    const data = await response.json();
-    console.log('Batch extract response:', JSON.stringify(data).slice(0, 500));
-    
-    // Extract results from response
-    const results = data.data || [];
-    return results;
-  } catch (error) {
-    console.error('Error in batchExtractProducts:', error);
-    return [];
+    // Check for image indicators
+    const lower = cleaned.toLowerCase();
+    const isImage = 
+      lower.includes('.jpg') || 
+      lower.includes('.jpeg') || 
+      lower.includes('.png') || 
+      lower.includes('.webp') || 
+      lower.includes('.gif') ||
+      lower.includes('/image') ||
+      lower.includes('/media') ||
+      lower.includes('/cdn') ||
+      lower.includes('cloudinary') ||
+      lower.includes('shopify') ||
+      lower.includes('imgix');
+
+    // Exclude obvious non-product images
+    const isNonProduct = 
+      lower.includes('logo') ||
+      lower.includes('icon') ||
+      lower.includes('favicon') ||
+      lower.includes('placeholder') ||
+      lower.includes('spinner') ||
+      lower.includes('loading') ||
+      lower.includes('banner') && !lower.includes('product') ||
+      lower.includes('/flags/') ||
+      lower.includes('/payment/') ||
+      lower.includes('/social/');
+
+    if (isNonProduct) {
+      return null;
+    }
+
+    // Must end with image extension OR contain image/media path
+    if (!isImage && !lower.endsWith('.html')) {
+      return null;
+    }
+
+    return cleaned;
+  } catch {
+    return null;
   }
 }
 
-// Fallback: scrape single product page
-async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
-  console.log('Scraping product page:', url);
-  
+function cleanProductName(name: string): string {
+  if (!name) return 'Unknown Product';
+  return name
+    .replace(/\s*[|\-–—]\s*[^|\-–—]+$/, '') // Remove brand suffix
+    .replace(/^\s+|\s+$/g, '') // Trim
+    .replace(/\s+/g, ' '); // Normalize spaces
+}
+
+// Phase 3: LLM-based JSON extraction using Firecrawl's scrape with JSON format
+async function extractProductWithLLM(url: string, apiKey: string): Promise<ExtractedProduct | null> {
+  console.log(`[LLM Extract] ${url}`);
+
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -274,141 +307,197 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
       },
       body: JSON.stringify({
         url,
-        formats: ['markdown', 'html'],
-        onlyMainContent: false,
+        formats: [
+          {
+            type: 'json',
+            schema: {
+              type: 'object',
+              properties: {
+                name: { 
+                  type: 'string', 
+                  description: 'The product name/title. Do not include brand name or size variants.' 
+                },
+                price: { 
+                  type: 'string', 
+                  description: 'The current selling price with currency symbol (e.g., €49.95). Use the sale/discounted price if available.' 
+                },
+                image_url: { 
+                  type: 'string', 
+                  description: 'The main product image URL. Must be a full URL starting with http. Do not use the site logo or icons.' 
+                },
+              },
+              required: ['name'],
+            },
+            prompt: 'Extract the main product information from this product detail page. For the image, find the main product photo (not the website logo). For the price, use the current/sale price if the item is discounted.',
+          },
+        ],
+        onlyMainContent: true,
+        waitFor: 2000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Scrape API error:', response.status, errorText);
+      console.error(`[LLM Extract] API error for ${url}:`, response.status, errorText.slice(0, 200));
       return null;
     }
 
     const data = await response.json();
-    const markdown = data.data?.markdown || data.markdown || '';
-    const html = data.data?.html || data.html || '';
-    const metadata = data.data?.metadata || data.metadata || {};
-
-    const name = metadata.title || extractFromMarkdown(markdown, /^#\s+(.+)/m) || 'Unknown Product';
-    const price = extractPrice(markdown) || extractPrice(html) || null;
     
-    let image = null;
-    if (metadata.ogImage && isValidImageUrl(metadata.ogImage)) {
-      image = metadata.ogImage;
+    // Extract JSON result from response
+    const jsonResult = data.data?.json || data.json || null;
+    
+    if (!jsonResult || !jsonResult.name) {
+      console.log(`[LLM Extract] No product data found for ${url}`);
+      return null;
     }
-    if (!image) image = extractImageFromJsonLd(html);
-    if (!image) image = extractProductImage(html);
-    if (!image) image = extractImage(markdown);
 
-    console.log(`Extracted: name="${cleanProductName(name)}", price="${price}", image="${image ? 'found' : 'not found'}"`);
+    console.log(`[LLM Extract] Success: name="${jsonResult.name}", price="${jsonResult.price || 'N/A'}"`);
 
     return {
-      name: cleanProductName(name),
-      price,
-      image_url: image,
-      sku: null,
+      name: jsonResult.name,
+      price: jsonResult.price || null,
+      image_url: jsonResult.image_url || null,
     };
   } catch (error) {
-    console.error('Error in scrapeProductPage:', error);
+    console.error(`[LLM Extract] Error for ${url}:`, error);
     return null;
   }
 }
 
-function isValidImageUrl(url: string): boolean {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  // Must be an actual image URL, not another HTML page
-  return (
-    (lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.png') || 
-     lower.includes('.webp') || lower.includes('.gif') || lower.includes('/image') ||
-     lower.includes('cdn') || lower.includes('media')) &&
-    !lower.endsWith('.html')
-  );
-}
+// Phase 4: Batch processing with chunks of 10
+async function extractProductsBatch(
+  urls: string[], 
+  apiKey: string, 
+  baseUrl: string,
+  excludedCategories: string[]
+): Promise<{ products: any[]; skipped: string[]; errors: string[] }> {
+  const products: any[] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
 
-function extractImageFromJsonLd(html: string): string | null {
-  // Look for JSON-LD product schema
-  const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
-  if (jsonLdMatch) {
-    for (const match of jsonLdMatch) {
-      try {
-        const jsonContent = match.replace(/<script[^>]*>|<\/script>/gi, '');
-        const parsed = JSON.parse(jsonContent);
-        
-        // Handle array of schemas
-        const schemas = Array.isArray(parsed) ? parsed : [parsed];
-        for (const schema of schemas) {
-          if (schema['@type'] === 'Product' && schema.image) {
-            const img = Array.isArray(schema.image) ? schema.image[0] : schema.image;
-            if (typeof img === 'string' && isValidImageUrl(img)) return img;
-            if (img?.url && isValidImageUrl(img.url)) return img.url;
-          }
+  // Process in sequential batches to avoid rate limits
+  const BATCH_SIZE = 5; // Conservative batch size
+  const DELAY_BETWEEN_REQUESTS = 1000; // 1 second delay
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+
+    try {
+      const extracted = await extractProductWithLLM(url, apiKey);
+
+      if (extracted && extracted.name) {
+        // Check exclusion
+        if (shouldExcludeProduct(url, extracted.name, excludedCategories)) {
+          console.log(`[Excluded] ${extracted.name} (category filter)`);
+          skipped.push(url);
+          continue;
         }
-      } catch {
-        // Invalid JSON, skip
+
+        // Clean and validate image URL
+        const cleanedImage = cleanImageUrl(extracted.image_url, baseUrl);
+
+        products.push({
+          name: cleanProductName(extracted.name),
+          price: extracted.price,
+          image_url: cleanedImage,
+          product_url: url,
+        });
+      } else {
+        errors.push(url);
       }
+    } catch (error) {
+      console.error(`[Error] Failed to extract ${url}:`, error);
+      errors.push(url);
+    }
+
+    // Add delay between requests to avoid rate limiting
+    if (i < urls.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
     }
   }
-  return null;
+
+  return { products, skipped, errors };
 }
 
-function extractProductImage(html: string): string | null {
-  // Look for common product image patterns in HTML
-  const patterns = [
-    // Look for large product images
-    /<img[^>]*class=["'][^"']*(?:product|main|primary|hero|gallery)[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-    // Look for data-src (lazy loaded)
-    /<img[^>]*data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-    // Look for srcset
-    /<img[^>]*srcset=["']([^"'\s,]+)/gi,
-    // Generic img with product in path
-    /<img[^>]*src=["']([^"']*(?:product|media|image)[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi,
-  ];
+// Phase 1: Target scrape_url directly for URL discovery
+async function discoverProductUrls(
+  scrapeUrl: string, 
+  apiKey: string, 
+  patterns: string[] | null
+): Promise<string[]> {
+  console.log(`[Discovery] Scraping listing page: ${scrapeUrl}`);
+
+  const allUrls: string[] = [];
+
+  // First, try to get links directly from the listing page (new arrivals, etc.)
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: scrapeUrl,
+        formats: ['links'],
+        onlyMainContent: false,
+        waitFor: 3000, // Wait for JS rendering
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const links = data.data?.links || data.links || [];
+      console.log(`[Discovery] Found ${links.length} links on listing page`);
+      allUrls.push(...links);
+    } else {
+      console.log(`[Discovery] Listing page scrape failed with status ${response.status}`);
+    }
+  } catch (error) {
+    console.error('[Discovery] Error scraping listing page:', error);
+  }
+
+  // If we got fewer than 10 product URLs from the listing, also try mapping the section
+  const productUrlsFromListing = allUrls.filter(url => isProductUrl(url, scrapeUrl, patterns));
   
-  for (const pattern of patterns) {
-    const match = pattern.exec(html);
-    if (match && match[1] && isValidImageUrl(match[1])) {
-      let imageUrl = match[1];
-      // Handle relative URLs
-      if (imageUrl.startsWith('//')) {
-        imageUrl = 'https:' + imageUrl;
+  if (productUrlsFromListing.length < 10) {
+    console.log(`[Discovery] Only ${productUrlsFromListing.length} products from listing, trying map...`);
+    
+    try {
+      // Map only with search for "new" or the path from scrape_url
+      const scrapeUrlPath = new URL(scrapeUrl).pathname;
+      const searchTerm = scrapeUrlPath.includes('new') || scrapeUrlPath.includes('nieuw') 
+        ? 'new' 
+        : undefined;
+
+      const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: scrapeUrl, // Map FROM the scrape_url, not site origin
+          search: searchTerm,
+          limit: 500,
+          includeSubdomains: false,
+        }),
+      });
+
+      if (mapResponse.ok) {
+        const mapData = await mapResponse.json();
+        const mapLinks = mapData.links || mapData.data?.links || [];
+        console.log(`[Discovery] Map found ${mapLinks.length} additional URLs`);
+        allUrls.push(...mapLinks);
       }
-      return imageUrl;
+    } catch (error) {
+      console.error('[Discovery] Map error:', error);
     }
   }
-  
-  return null;
-}
 
-function extractFromMarkdown(markdown: string, pattern: RegExp): string | null {
-  const match = markdown.match(pattern);
-  return match ? match[1].trim() : null;
-}
-
-function extractPrice(markdown: string): string | null {
-  // Match common price patterns like €29,95 or $29.95 or 29,95 EUR
-  const pricePatterns = [
-    /[€$£]\s*\d+[.,]\d{2}/,
-    /\d+[.,]\d{2}\s*[€$£]/,
-    /\d+[.,]\d{2}\s*(EUR|USD|GBP)/i,
-  ];
-  
-  for (const pattern of pricePatterns) {
-    const match = markdown.match(pattern);
-    if (match) return match[0].trim();
-  }
-  return null;
-}
-
-function extractImage(markdown: string): string | null {
-  const imgMatch = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+)/);
-  return imgMatch ? imgMatch[1] : null;
-}
-
-function cleanProductName(name: string): string {
-  // Remove common suffixes like "| Brand Name" or "- Shop Name"
-  return name.replace(/\s*[|\-–—]\s*[^|\-–—]+$/, '').trim();
+  // Deduplicate
+  return Array.from(new Set(allUrls));
 }
 
 Deno.serve(async (req) => {
@@ -429,16 +518,14 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    
-    // Create client with user's auth token
+
     const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
     });
 
-    // Verify user is authenticated
     const token = authHeader.replace('Bearer ', '');
     const { data: claimsData, error: claimsError } = await authSupabase.auth.getClaims(token);
-    
+
     if (claimsError || !claimsData?.claims) {
       console.log('Authentication failed:', claimsError?.message);
       return new Response(
@@ -449,7 +536,7 @@ Deno.serve(async (req) => {
 
     console.log('Authenticated user:', claimsData.claims.sub);
 
-    const { competitor, limit = 50 } = await req.json();
+    const { competitor, limit = 25 } = await req.json();
 
     if (!competitor) {
       return new Response(
@@ -466,13 +553,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Use service role for database operations
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch competitor from database
     let competitorConfig: CompetitorConfig | null = null;
-    
+
     const { data: competitorData, error: competitorError } = await supabase
       .from('competitors')
       .select('*')
@@ -483,7 +569,6 @@ Deno.serve(async (req) => {
       competitorConfig = competitorData;
     } else {
       console.log('Competitor not found by ID, trying by name...');
-      // Fallback to name-based lookup for backwards compatibility
       const { data: competitorByName, error: nameError } = await supabase
         .from('competitors')
         .select('*')
@@ -497,90 +582,34 @@ Deno.serve(async (req) => {
 
     if (!competitorConfig) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Competitor not found: ${competitor}` 
-        }),
+        JSON.stringify({ success: false, error: `Competitor not found: ${competitor}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[v4] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
+    console.log(`[v6] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
-    // Step 1: Use Firecrawl MAP to discover ALL product URLs on the site
-    // This handles pagination automatically and returns up to 5000 URLs
-    const siteOrigin = new URL(competitorConfig.scrape_url).origin;
-    console.log(`Mapping site ${siteOrigin} for all product URLs...`);
-    
-    let allUrls: string[] = [];
-    
-    const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: siteOrigin,
-        limit: 2000, // Get up to 2000 URLs
-        includeSubdomains: false,
-      }),
-    });
+    // Phase 1: Discover product URLs from the listing page
+    const allUrls = await discoverProductUrls(
+      competitorConfig.scrape_url,
+      apiKey,
+      competitorConfig.product_url_patterns
+    );
 
-    if (mapResponse.ok) {
-      const mapData = await mapResponse.json();
-      allUrls = mapData.links || mapData.data?.links || [];
-      console.log(`Map discovered ${allUrls.length} URLs on site`);
-    } else {
-      console.log('Map failed, falling back to scrape...');
-      
-      // Fallback: Scrape the listing page directly
-      const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: competitorConfig.scrape_url,
-          formats: ['links', 'markdown'],
-          onlyMainContent: false,
-          waitFor: 3000,
-        }),
-      });
+    console.log(`[Discovery] Total URLs found: ${allUrls.length}`);
 
-      if (!scrapeResponse.ok) {
-        const errorData = await scrapeResponse.json();
-        console.error('Scrape failed:', errorData);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Failed to discover products on competitor site' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const scrapeData = await scrapeResponse.json();
-      const linkUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
-      const listingMarkdown: string = scrapeData.data?.markdown || scrapeData.markdown || '';
-      const markdownUrls = listingMarkdown ? extractUrlsFromMarkdown(listingMarkdown) : [];
-      allUrls = Array.from(new Set([...linkUrls, ...markdownUrls]));
-    }
-    
-    console.log(`Found ${allUrls.length} total URLs`);
-
-    // Step 2: Filter to product URLs only
+    // Phase 2: Filter to product URLs only
     const productUrls = allUrls.filter((url) =>
       isProductUrl(url, competitorConfig.scrape_url, competitorConfig.product_url_patterns)
     );
-    console.log(`Found ${productUrls.length} product URLs`);
+    console.log(`[Filter] ${productUrls.length} product URLs identified`);
 
     if (productUrls.length === 0) {
-      const htmlLike = allUrls.filter((u) => u.toLowerCase().includes('.html')).length;
-      console.log(`[debug] 0 product URLs. URLs with ".html": ${htmlLike}`);
-      console.log('[debug] Sample URLs:', allUrls.slice(0, 25));
-      console.log('[debug] Patterns:', competitorConfig.product_url_patterns);
+      console.log('[Debug] Sample URLs:', allUrls.slice(0, 15));
+      console.log('[Debug] Patterns:', competitorConfig.product_url_patterns);
     }
 
-    // Step 2b: Deduplicate product URLs by base product key (ignore size/color variants)
+    // Phase 6: Deduplicate by base product key
     const seenBaseKeys = new Set<string>();
     const uniqueProductUrls: string[] = [];
     for (const url of productUrls) {
@@ -590,107 +619,61 @@ Deno.serve(async (req) => {
         uniqueProductUrls.push(url);
       }
     }
-    console.log(`${uniqueProductUrls.length} unique products after deduplicating size variants`);
+    console.log(`[Dedup] ${uniqueProductUrls.length} unique products after variant deduplication`);
 
-    // Step 3: Get existing product URLs to avoid duplicates
+    // Get existing products to avoid re-scraping
     const { data: existingProducts } = await supabase
       .from('products')
       .select('product_url')
       .eq('competitor', competitorConfig.name);
 
-    // Build a set of existing base keys for comparison
     const existingBaseKeys = new Set(
       (existingProducts || []).map((p) => getProductBaseKey(p.product_url))
     );
     const newProductUrls = uniqueProductUrls.filter(
       (url: string) => !existingBaseKeys.has(getProductBaseKey(url))
     );
-    console.log(`${newProductUrls.length} new product URLs to scrape`);
+    console.log(`[New] ${newProductUrls.length} new product URLs to scrape`);
 
-    // Pre-filter URLs by excluded categories before scraping
+    // Pre-filter by excluded categories
     const filteredNewUrls = newProductUrls.filter(
       (url: string) => !shouldExcludeUrl(url, competitorConfig.excluded_categories)
     );
-    console.log(`${filteredNewUrls.length} URLs after pre-filtering by excluded categories`);
+    console.log(`[PreFilter] ${filteredNewUrls.length} URLs after category exclusion`);
 
-    // Step 4: Extract products using sequential scraping (batch API limited to 10)
+    // Phase 3 & 4: Extract products using LLM-based JSON extraction
     const urlsToScrape = filteredNewUrls.slice(0, limit);
-    const scrapedProducts: any[] = [];
-    const skippedProducts: string[] = [];
-    const errors: string[] = [];
+
+    let extractionResult = { products: [] as any[], skipped: [] as string[], errors: [] as string[] };
 
     if (urlsToScrape.length > 0) {
-      console.log(`Scraping ${urlsToScrape.length} products...`);
-      
-      // Try batch extract first (processes all URLs in parallel on Firecrawl's side)
-      const batchResults = await batchExtractProducts(urlsToScrape, apiKey);
-      
-      if (batchResults && batchResults.length > 0) {
-        // Process batch results
-        for (let i = 0; i < batchResults.length; i++) {
-          const result = batchResults[i];
-          const url = urlsToScrape[i] || result.url || '';
-          
-          if (result && result.name) {
-            // Check if product should be excluded
-            if (shouldExcludeProduct(url, result.name, competitorConfig.excluded_categories)) {
-              console.log(`Excluded product (category filter): ${result.name}`);
-              skippedProducts.push(url);
-              continue;
-            }
+      console.log(`[Extract] Processing ${urlsToScrape.length} products with LLM extraction...`);
 
-            scrapedProducts.push({
-              name: cleanProductName(result.name),
-              price: result.price || null,
-              sku: null,
-              image_url: result.image_url || null,
-              product_url: url,
-              competitor: competitorConfig.name,
-              status: 'pending',
-            });
-          }
-        }
-      } else {
-        // Fallback to sequential scraping if batch fails
-        console.log('Batch extract failed, falling back to sequential scraping...');
-        for (const url of urlsToScrape.slice(0, 10)) { // Limit fallback to 10 to avoid timeout
-          try {
-            const productData = await scrapeProductPage(url, apiKey);
-            
-            if (productData && productData.name) {
-              if (shouldExcludeProduct(url, productData.name, competitorConfig.excluded_categories)) {
-                console.log(`Excluded product (category filter): ${productData.name}`);
-                skippedProducts.push(url);
-                continue;
-              }
+      extractionResult = await extractProductsBatch(
+        urlsToScrape,
+        apiKey,
+        competitorConfig.scrape_url,
+        competitorConfig.excluded_categories
+      );
 
-              scrapedProducts.push({
-                name: productData.name,
-                price: productData.price || null,
-                sku: productData.sku || null,
-                image_url: productData.image_url || null,
-                product_url: url,
-                competitor: competitorConfig.name,
-                status: 'pending',
-              });
-            }
-          } catch (error) {
-            console.error(`Error scraping ${url}:`, error);
-            errors.push(url);
-          }
-        }
-      }
+      // Add competitor info to products
+      extractionResult.products = extractionResult.products.map((p) => ({
+        ...p,
+        competitor: competitorConfig.name,
+        status: 'pending',
+        sku: null,
+      }));
     }
 
-    console.log(`Scraped ${scrapedProducts.length} products successfully, skipped ${skippedProducts.length}`);
+    console.log(`[Result] ${extractionResult.products.length} products extracted, ${extractionResult.skipped.length} skipped, ${extractionResult.errors.length} errors`);
 
-    // Step 5: Insert new products into database
-    if (scrapedProducts.length > 0) {
+    // Insert products into database
+    if (extractionResult.products.length > 0) {
       const { error: insertError } = await supabase
         .from('products')
-        .upsert(scrapedProducts, { 
+        .upsert(extractionResult.products, {
           onConflict: 'product_url',
-          ignoreDuplicates: true 
+          ignoreDuplicates: true
         });
 
       if (insertError) {
@@ -717,9 +700,9 @@ Deno.serve(async (req) => {
           productUrlsFound: productUrls.length,
           uniqueProductsFound: uniqueProductUrls.length,
           newProductUrls: newProductUrls.length,
-          scrapedCount: scrapedProducts.length,
-          skippedCount: skippedProducts.length,
-          errorsCount: errors.length,
+          scrapedCount: extractionResult.products.length,
+          skippedCount: extractionResult.skipped.length,
+          errorsCount: extractionResult.errors.length,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
