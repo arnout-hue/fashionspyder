@@ -207,6 +207,14 @@ function shouldExcludeProduct(url: string, name: string, excludedCategories: str
   return excludedCategories.some((cat) => searchText.includes(cat.toLowerCase()));
 }
 
+// Pre-filter URLs by excluded categories before scraping
+function shouldExcludeUrl(url: string, excludedCategories: string[]): boolean {
+  if (!excludedCategories || excludedCategories.length === 0) return false;
+  
+  const urlLower = url.toLowerCase();
+  return excludedCategories.some((cat) => urlLower.includes(cat.toLowerCase()));
+}
+
 // Batch extract products using Firecrawl's extract endpoint
 async function batchExtractProducts(urls: string[], apiKey: string): Promise<any[]> {
   console.log(`Batch extracting ${urls.length} products...`);
@@ -594,18 +602,24 @@ Deno.serve(async (req) => {
       (existingProducts || []).map((p) => getProductBaseKey(p.product_url))
     );
     const newProductUrls = uniqueProductUrls.filter(
-      (url) => !existingBaseKeys.has(getProductBaseKey(url))
+      (url: string) => !existingBaseKeys.has(getProductBaseKey(url))
     );
     console.log(`${newProductUrls.length} new product URLs to scrape`);
 
-    // Step 4: Extract products using batch API (much faster than sequential)
-    const urlsToScrape = newProductUrls.slice(0, limit);
+    // Pre-filter URLs by excluded categories before scraping
+    const filteredNewUrls = newProductUrls.filter(
+      (url: string) => !shouldExcludeUrl(url, competitorConfig.excluded_categories)
+    );
+    console.log(`${filteredNewUrls.length} URLs after pre-filtering by excluded categories`);
+
+    // Step 4: Extract products using sequential scraping (batch API limited to 10)
+    const urlsToScrape = filteredNewUrls.slice(0, limit);
     const scrapedProducts: any[] = [];
     const skippedProducts: string[] = [];
     const errors: string[] = [];
 
     if (urlsToScrape.length > 0) {
-      console.log(`Batch extracting ${urlsToScrape.length} products...`);
+      console.log(`Scraping ${urlsToScrape.length} products...`);
       
       // Try batch extract first (processes all URLs in parallel on Firecrawl's side)
       const batchResults = await batchExtractProducts(urlsToScrape, apiKey);
