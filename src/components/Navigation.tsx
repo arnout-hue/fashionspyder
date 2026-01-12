@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,11 +13,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management";
 
 interface NavigationProps {
   currentView: View;
@@ -40,7 +41,7 @@ export const Navigation = ({
   onCompetitorChange,
   competitors,
 }: NavigationProps) => {
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
   
   const mainNavItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
     {
@@ -68,7 +69,7 @@ export const Navigation = ({
     },
   ];
 
-  const settingsItems: { id: View; label: string; icon: React.ReactNode }[] = [
+  const settingsItems: { id: View; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     {
       id: "crawl",
       label: "Crawl Competitors",
@@ -84,9 +85,16 @@ export const Navigation = ({
       label: "Manage Colleagues",
       icon: <UserPlus className="h-4 w-4" />,
     },
+    {
+      id: "user-management",
+      label: "Manage Users",
+      icon: <ShieldCheck className="h-4 w-4" />,
+      adminOnly: true,
+    },
   ];
 
-  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management";
+  const filteredSettingsItems = settingsItems.filter(item => !item.adminOnly || isAdmin);
+  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management";
 
   return (
     <>
@@ -135,15 +143,20 @@ export const Navigation = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {settingsItems.map((item) => (
-                  <DropdownMenuItem
-                    key={item.id}
-                    onClick={() => onViewChange(item.id)}
-                    className="gap-2"
-                  >
-                    {item.icon}
-                    {item.label}
-                  </DropdownMenuItem>
+                {filteredSettingsItems.map((item, index) => (
+                  <div key={item.id}>
+                    {item.adminOnly && index > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuItem
+                      onClick={() => onViewChange(item.id)}
+                      className="gap-2"
+                    >
+                      {item.icon}
+                      {item.label}
+                      {item.adminOnly && (
+                        <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
+                      )}
+                    </DropdownMenuItem>
+                  </div>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -245,15 +258,20 @@ export const Navigation = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="mb-2">
-              {settingsItems.map((item) => (
-                <DropdownMenuItem
-                  key={item.id}
-                  onClick={() => onViewChange(item.id)}
-                  className="gap-2"
-                >
-                  {item.icon}
-                  {item.label}
-                </DropdownMenuItem>
+              {filteredSettingsItems.map((item, index) => (
+                <div key={item.id}>
+                  {item.adminOnly && index > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    onClick={() => onViewChange(item.id)}
+                    className="gap-2"
+                  >
+                    {item.icon}
+                    {item.label}
+                    {item.adminOnly && (
+                      <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
+                    )}
+                  </DropdownMenuItem>
+                </div>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
