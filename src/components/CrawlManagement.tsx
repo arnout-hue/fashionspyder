@@ -138,6 +138,10 @@ export const CrawlManagement = () => {
     setLoading(false);
   }, [toast, fetchCrawlHistory]);
 
+  useEffect(() => {
+    fetchCompetitors();
+  }, [fetchCompetitors]);
+
   const resetForm = () => {
     setFormData({
       name: '',
