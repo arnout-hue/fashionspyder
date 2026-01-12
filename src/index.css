@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+/* Fashion-forward design system with rose-gold accents */
+
+@layer base {
+  :root {
+    --background: 30 20% 99%;
+    --foreground: 20 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 10% 15%;
+
+    /* Rose-gold primary */
+    --primary: 15 60% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 15% 95%;
+    --secondary-foreground: 20 10% 25%;
+
+    --muted: 30 10% 96%;
+    --muted-foreground: 20 5% 45%;
+
+    --accent: 15 50% 90%;
+    --accent-foreground: 15 60% 40%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success green for positive actions */
+    --success: 145 60% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 30 15% 90%;
+    --input: 30 15% 90%;
+    --ring: 15 60% 65%;
+
+    --radius: 0.75rem;
+
+    /* Elegant shadows */
+    --shadow-soft: 0 4px 20px -4px hsl(20 10% 15% / 0.08);
+    --shadow-card: 0 8px 30px -8px hsl(20 10% 15% / 0.1);
+    --shadow-elevated: 0 20px 50px -15px hsl(20 10% 15% / 0.15);
+
+    --sidebar-background: 30 15% 98%;
+    --sidebar-foreground: 20 10% 25%;
+    --sidebar-primary: 15 60% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 15% 94%;
+    --sidebar-accent-foreground: 20 10% 25%;
+    --sidebar-border: 30 15% 90%;
+    --sidebar-ring: 15 60% 65%;
+  }
+
+  .dark {
+    --background: 20 15% 8%;
+    --foreground: 30 15% 95%;
+
+    --card: 20 12% 12%;
+    --card-foreground: 30 15% 95%;
+
+    --popover: 20 12% 12%;
+    --popover-foreground: 30 15% 95%;
+
+    --primary: 15 55% 60%;
+    --primary-foreground: 20 15% 8%;
+
+    --secondary: 20 10% 18%;
+    --secondary-foreground: 30 15% 90%;
+
+    --muted: 20 10% 18%;
+    --muted-foreground: 30 10% 55%;
+
+    --accent: 15 40% 20%;
+    --accent-foreground: 15 55% 75%;
+
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 50% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 20 10% 20%;
+    --input: 20 10% 20%;
+    --ring: 15 55% 60%;
+
+    --sidebar-background: 20 12% 10%;
+    --sidebar-foreground: 30 15% 90%;
+    --sidebar-primary: 15 55% 60%;
+    --sidebar-primary-foreground: 20 15% 8%;
+    --sidebar-accent: 20 10% 15%;
+    --sidebar-accent-foreground: 30 15% 90%;
+    --sidebar-border: 20 10% 18%;
+    --sidebar-ring: 15 55% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Manrope', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+  }
+
+  .font-body {
+    font-family: 'Manrope', sans-serif;
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  /* Swipe animations */
+  @keyframes swipe-right {
+    0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateX(150%) rotate(20deg); opacity: 0; }
+  }
+
+  @keyframes swipe-left {
+    0% { transform: translateX(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateX(-150%) rotate(-20deg); opacity: 0; }
+  }
+
+  .animate-swipe-right {
+    animation: swipe-right 0.4s ease-out forwards;
+  }
+
+  .animate-swipe-left {
+    animation: swipe-left 0.4s ease-out forwards;
+  }
+
+  /* Card stack effect */
+  .card-stack {
+    perspective: 1000px;
+  }
+
+  .card-stack > *:nth-child(1) { z-index: 30; }
+  .card-stack > *:nth-child(2) { z-index: 20; transform: scale(0.95) translateY(8px); }
+  .card-stack > *:nth-child(3) { z-index: 10; transform: scale(0.9) translateY(16px); }
+}
