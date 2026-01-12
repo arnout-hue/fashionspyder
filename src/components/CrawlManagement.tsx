@@ -46,6 +46,7 @@ interface CrawlStatus {
     productUrlsFound: number;
     newProductUrls: number;
     scrapedCount: number;
+    skippedCount: number;
     errorsCount: number;
   };
 }
@@ -707,23 +708,21 @@ export const CrawlManagement = () => {
                   )}
 
                   {status?.results && (
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="grid grid-cols-3 gap-2 text-sm">
                       <div className="rounded-md bg-muted/50 p-2">
-                        <p className="text-muted-foreground text-xs">URLs Found</p>
-                        <p className="font-semibold">{status.results.totalUrlsFound}</p>
-                      </div>
-                      <div className="rounded-md bg-muted/50 p-2">
-                        <p className="text-muted-foreground text-xs">Products</p>
+                        <p className="text-muted-foreground text-xs">Found</p>
                         <p className="font-semibold">{status.results.productUrlsFound}</p>
                       </div>
-                      <div className="rounded-md bg-muted/50 p-2">
-                        <p className="text-muted-foreground text-xs">New</p>
-                        <p className="font-semibold">{status.results.newProductUrls}</p>
+                      <div className="rounded-md bg-green-500/10 p-2">
+                        <p className="text-green-600 text-xs">Added</p>
+                        <p className="font-semibold text-green-600">
+                          +{status.results.scrapedCount}
+                        </p>
                       </div>
-                      <div className="rounded-md bg-muted/50 p-2">
-                        <p className="text-muted-foreground text-xs">Scraped</p>
-                        <p className="font-semibold text-green-500">
-                          {status.results.scrapedCount}
+                      <div className="rounded-md bg-orange-500/10 p-2">
+                        <p className="text-orange-600 text-xs">Filtered</p>
+                        <p className="font-semibold text-orange-600">
+                          {status.results.skippedCount || 0}
                         </p>
                       </div>
                     </div>
