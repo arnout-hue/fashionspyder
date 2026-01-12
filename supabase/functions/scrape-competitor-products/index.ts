@@ -152,6 +152,7 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
 function getProductBaseKey(url: string): string {
   try {
     const urlObj = new URL(url);
+    // Strip query parameters (like ?variant=123) to normalize the URL
     const path = urlObj.pathname.toLowerCase();
 
     // Shopware-style: /product-slug/123456-Color-Size.html → extract the numeric ID
@@ -160,7 +161,7 @@ function getProductBaseKey(url: string): string {
       return shopwareMatch[1];
     }
 
-    // Shopify-style: /products/product-handle → use the handle
+    // Shopify-style: /products/product-handle → use the handle (ignoring ?variant=)
     const shopifyMatch = path.match(/\/products\/([^/?#]+)/);
     if (shopifyMatch) {
       return shopifyMatch[1];
@@ -174,8 +175,8 @@ function getProductBaseKey(url: string): string {
       return numericMatch[1];
     }
 
-    // Fallback: use the full URL as the key (no deduplication)
-    return url;
+    // Fallback: use pathname only (strip query params) to help deduplication
+    return path;
   } catch {
     return url;
   }
