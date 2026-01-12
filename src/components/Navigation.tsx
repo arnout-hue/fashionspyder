@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, Globe, LogOut } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,10 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "settings";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management";
 
 interface NavigationProps {
   currentView: View;
@@ -35,7 +41,8 @@ export const Navigation = ({
   competitors,
 }: NavigationProps) => {
   const { signOut } = useAuth();
-  const navItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
+  
+  const mainNavItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
     {
       id: "swipe",
       label: "Discover",
@@ -59,17 +66,22 @@ export const Navigation = ({
       label: "Suppliers",
       icon: <Package className="h-4 w-4" />,
     },
+  ];
+
+  const settingsItems: { id: View; label: string; icon: React.ReactNode }[] = [
     {
       id: "crawl",
-      label: "Crawl",
+      label: "Crawl Competitors",
       icon: <Globe className="h-4 w-4" />,
     },
     {
-      id: "settings",
-      label: "Settings",
-      icon: <Settings className="h-4 w-4" />,
+      id: "supplier-management",
+      label: "Manage Suppliers",
+      icon: <Users className="h-4 w-4" />,
     },
   ];
+
+  const isSettingsView = currentView === "crawl" || currentView === "supplier-management";
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
@@ -81,7 +93,7 @@ export const Navigation = ({
 
         {/* Nav Items */}
         <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
+          {mainNavItems.map((item) => (
             <Button
               key={item.id}
               variant={currentView === item.id ? "secondary" : "ghost"}
@@ -101,6 +113,33 @@ export const Navigation = ({
               )}
             </Button>
           ))}
+          
+          {/* Settings Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={isSettingsView ? "secondary" : "ghost"}
+                size="sm"
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {settingsItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  onClick={() => onViewChange(item.id)}
+                  className="gap-2"
+                >
+                  {item.icon}
+                  {item.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
 
         {/* Filter and Logout */}
@@ -134,7 +173,7 @@ export const Navigation = ({
 
       {/* Mobile Nav */}
       <nav className="flex border-t md:hidden">
-        {navItems.slice(0, 4).map((item) => (
+        {mainNavItems.map((item) => (
           <Button
             key={item.id}
             variant="ghost"
@@ -155,6 +194,32 @@ export const Navigation = ({
             <span className="text-xs">{item.label}</span>
           </Button>
         ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`flex-1 flex-col gap-1 rounded-none py-3 ${
+                isSettingsView ? "bg-accent text-accent-foreground" : ""
+              }`}
+            >
+              <Settings className="h-4 w-4" />
+              <span className="text-xs">Settings</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {settingsItems.map((item) => (
+              <DropdownMenuItem
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className="gap-2"
+              >
+                {item.icon}
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
     </header>
   );

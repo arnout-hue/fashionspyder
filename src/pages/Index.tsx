@@ -13,7 +13,7 @@ import {
   Supplier,
 } from "@/data/mockData";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "settings";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
@@ -314,7 +314,7 @@ const Index = () => {
           <CrawlManagement />
         )}
 
-        {currentView === "settings" && (
+        {currentView === "supplier-management" && (
           <SupplierManagement
             suppliers={suppliers}
             onAddSupplier={handleAddSupplier}
