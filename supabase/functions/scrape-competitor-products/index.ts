@@ -1,4 +1,4 @@
-// Competitor product scraper - v2 with authentication
+// Competitor product scraper - v5 with batch extraction
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -207,6 +207,52 @@ function shouldExcludeProduct(url: string, name: string, excludedCategories: str
   return excludedCategories.some((cat) => searchText.includes(cat.toLowerCase()));
 }
 
+// Batch extract products using Firecrawl's extract endpoint
+async function batchExtractProducts(urls: string[], apiKey: string): Promise<any[]> {
+  console.log(`Batch extracting ${urls.length} products...`);
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/extract', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        urls,
+        prompt: 'Extract product information from this page',
+        schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Product name/title' },
+            price: { type: 'string', description: 'Product price including currency symbol' },
+            image_url: { type: 'string', description: 'Main product image URL' },
+          },
+          required: ['name'],
+        },
+        enableWebSearch: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Batch extract API error:', response.status, errorText);
+      return [];
+    }
+
+    const data = await response.json();
+    console.log('Batch extract response:', JSON.stringify(data).slice(0, 500));
+    
+    // Extract results from response
+    const results = data.data || [];
+    return results;
+  } catch (error) {
+    console.error('Error in batchExtractProducts:', error);
+    return [];
+  }
+}
+
+// Fallback: scrape single product page
 async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
   console.log('Scraping product page:', url);
   
@@ -220,7 +266,7 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
       body: JSON.stringify({
         url,
         formats: ['markdown', 'html'],
-        onlyMainContent: false, // Get full page to find images
+        onlyMainContent: false,
       }),
     });
 
@@ -235,32 +281,16 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
     const html = data.data?.html || data.html || '';
     const metadata = data.data?.metadata || data.metadata || {};
 
-    // Extract product info from metadata and content
     const name = metadata.title || extractFromMarkdown(markdown, /^#\s+(.+)/m) || 'Unknown Product';
     const price = extractPrice(markdown) || extractPrice(html) || null;
     
-    // Try multiple image extraction methods
     let image = null;
-    
-    // 1. OG Image from metadata (most reliable)
     if (metadata.ogImage && isValidImageUrl(metadata.ogImage)) {
       image = metadata.ogImage;
     }
-    
-    // 2. Try to find product image in JSON-LD schema
-    if (!image) {
-      image = extractImageFromJsonLd(html);
-    }
-    
-    // 3. Look for product images in HTML (img tags with product-related classes/src)
-    if (!image) {
-      image = extractProductImage(html);
-    }
-    
-    // 4. Fall back to markdown image extraction
-    if (!image) {
-      image = extractImage(markdown);
-    }
+    if (!image) image = extractImageFromJsonLd(html);
+    if (!image) image = extractProductImage(html);
+    if (!image) image = extractImage(markdown);
 
     console.log(`Extracted: name="${cleanProductName(name)}", price="${price}", image="${image ? 'found' : 'not found'}"`);
 
@@ -568,40 +598,72 @@ Deno.serve(async (req) => {
     );
     console.log(`${newProductUrls.length} new product URLs to scrape`);
 
-    // Step 4: Scrape new products (limited)
+    // Step 4: Extract products using batch API (much faster than sequential)
     const urlsToScrape = newProductUrls.slice(0, limit);
     const scrapedProducts: any[] = [];
     const skippedProducts: string[] = [];
     const errors: string[] = [];
 
-    for (const url of urlsToScrape) {
-      try {
-        const productData = await scrapeProductPage(url, apiKey);
-        
-        if (productData && productData.name) {
-          // Check if product should be excluded based on category filters
-          if (shouldExcludeProduct(url, productData.name, competitorConfig.excluded_categories)) {
-            console.log(`Excluded product (category filter): ${productData.name}`);
-            skippedProducts.push(url);
-            continue;
-          }
+    if (urlsToScrape.length > 0) {
+      console.log(`Batch extracting ${urlsToScrape.length} products...`);
+      
+      // Try batch extract first (processes all URLs in parallel on Firecrawl's side)
+      const batchResults = await batchExtractProducts(urlsToScrape, apiKey);
+      
+      if (batchResults && batchResults.length > 0) {
+        // Process batch results
+        for (let i = 0; i < batchResults.length; i++) {
+          const result = batchResults[i];
+          const url = urlsToScrape[i] || result.url || '';
+          
+          if (result && result.name) {
+            // Check if product should be excluded
+            if (shouldExcludeProduct(url, result.name, competitorConfig.excluded_categories)) {
+              console.log(`Excluded product (category filter): ${result.name}`);
+              skippedProducts.push(url);
+              continue;
+            }
 
-          scrapedProducts.push({
-            name: productData.name,
-            price: productData.price || null,
-            sku: productData.sku || null,
-            image_url: productData.image_url || null,
-            product_url: url,
-            competitor: competitorConfig.name,
-            status: 'pending',
-          });
+            scrapedProducts.push({
+              name: cleanProductName(result.name),
+              price: result.price || null,
+              sku: null,
+              image_url: result.image_url || null,
+              product_url: url,
+              competitor: competitorConfig.name,
+              status: 'pending',
+            });
+          }
         }
-        
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        console.error(`Error scraping ${url}:`, error);
-        errors.push(url);
+      } else {
+        // Fallback to sequential scraping if batch fails
+        console.log('Batch extract failed, falling back to sequential scraping...');
+        for (const url of urlsToScrape.slice(0, 10)) { // Limit fallback to 10 to avoid timeout
+          try {
+            const productData = await scrapeProductPage(url, apiKey);
+            
+            if (productData && productData.name) {
+              if (shouldExcludeProduct(url, productData.name, competitorConfig.excluded_categories)) {
+                console.log(`Excluded product (category filter): ${productData.name}`);
+                skippedProducts.push(url);
+                continue;
+              }
+
+              scrapedProducts.push({
+                name: productData.name,
+                price: productData.price || null,
+                sku: productData.sku || null,
+                image_url: productData.image_url || null,
+                product_url: url,
+                competitor: competitorConfig.name,
+                status: 'pending',
+              });
+            }
+          } catch (error) {
+            console.error(`Error scraping ${url}:`, error);
+            errors.push(url);
+          }
+        }
       }
     }
 
