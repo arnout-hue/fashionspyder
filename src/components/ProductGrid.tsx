@@ -81,6 +81,17 @@ export const ProductGrid = ({
                 <Calendar className="h-3 w-3" />
                 <span>{format(crawlDate, "MMM d, yyyy")}</span>
               </div>
+
+              {/* External Link Button */}
+              <a
+                href={product.product_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-foreground shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:scale-110"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
             </div>
 
             {/* Product Info */}
