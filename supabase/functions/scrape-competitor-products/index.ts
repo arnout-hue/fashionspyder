@@ -14,15 +14,77 @@ interface CompetitorConfig {
   excluded_categories: string[];
 }
 
-function isProductUrl(url: string, patterns: string[]): boolean {
-  if (!patterns || patterns.length === 0) {
-    // Default pattern matching for common e-commerce URLs
-    return /\/product[s]?\//i.test(url) || 
-           /\/collection[s]?\//i.test(url) ||
-           /\/p\//i.test(url) ||
-           /\.(html|php)$/i.test(url);
+function isProductUrl(url: string, baseUrl: string, patterns: string[]): boolean {
+  // Exclude common non-product patterns
+  const excludePatterns = [
+    /\/collections?\/?$/i,
+    /\/categor(y|ies)/i,
+    /\/nieuw\/?$/i,
+    /\/new\/?$/i,
+    /\/new-arrivals\/?$/i,
+    /\/shop\/?$/i,
+    /\/kleding\/?$/i,
+    /\/kleding\/[^\/]+\/?$/i, // Category pages like /kleding/dames-jurken/
+    /\/page\/\d+/i,
+    /\?.*page=/i,
+    /\/cart/i,
+    /\/checkout/i,
+    /\/account/i,
+    /\/login/i,
+    /\/wishlist/i,
+    /\/search/i,
+    /\/filter/i,
+    /\/sort/i,
+    /\/week-\d+/i,
+    /\/privacy/i,
+    /\/terms/i,
+    /\/faq/i,
+    /\/contact/i,
+    /\/about/i,
+    /\/sale\/?$/i,
+    /\/party\/?$/i,
+    /\/back-in-stock/i,
+    /\/accessoires\/?$/i,
+    /\/schoenen\/?$/i,
+    /\/tassen\/?$/i,
+    /#.*/i,
+    /\?.*$/i, // Exclude URLs with query params
+  ];
+
+  // Also exclude the base URL itself and homepage
+  try {
+    const urlObj = new URL(url);
+    const baseUrlObj = new URL(baseUrl);
+    if (urlObj.pathname === '/' || urlObj.pathname === '') return false;
+    if (url === baseUrl || url === baseUrl.replace(/\/$/, '')) return false;
+  } catch {
+    // Invalid URL
+    return false;
   }
-  return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
+
+  if (excludePatterns.some((pattern) => pattern.test(url))) {
+    return false;
+  }
+
+  // If custom patterns are defined, use them
+  if (patterns && patterns.length > 0) {
+    return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
+  }
+
+  // Default pattern matching: look for product IDs in URLs
+  // Loavies: /nl/29579330906-vesten-bruin-gestreepte-print/
+  // Most sites have numeric IDs or specific product paths
+  const productPatterns = [
+    /\/\d{5,}-[a-z-]+/i, // Numeric ID followed by slug (Loavies style)
+    /\/product[s]?\/[^\/]+$/i,
+    /\/p\/[^\/]+$/i,
+    /\/[a-z-]+-\d+\.html$/i,
+    /\/collections?\/[^\/]+\/products?\/[^\/]+$/i,
+    /\/item\/[^\/]+$/i,
+    /\/artikel\/[^\/]+$/i,
+  ];
+
+  return productPatterns.some((pattern) => pattern.test(url));
 }
 
 function shouldExcludeProduct(url: string, name: string, excludedCategories: string[]): boolean {
@@ -35,41 +97,75 @@ function shouldExcludeProduct(url: string, name: string, excludedCategories: str
 async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
   console.log('Scraping product page:', url);
   
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url,
-      formats: [
-        { 
-          type: 'json', 
-          schema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string', description: 'Product name/title' },
-              price: { type: 'string', description: 'Product price including currency symbol' },
-              sku: { type: 'string', description: 'Product SKU, EAN, or article number' },
-              image_url: { type: 'string', description: 'Main product image URL' },
-              category: { type: 'string', description: 'Product category' },
-            },
-            required: ['name'],
-          },
-        },
-      ],
-      onlyMainContent: true,
-    }),
-  });
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown'],
+        onlyMainContent: true,
+      }),
+    });
 
-  if (!response.ok) {
-    console.error('Failed to scrape product:', url);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Scrape API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const markdown = data.data?.markdown || data.markdown || '';
+    const metadata = data.data?.metadata || data.metadata || {};
+
+    // Extract product info from metadata and markdown
+    const name = metadata.title || extractFromMarkdown(markdown, /^#\s+(.+)/m) || 'Unknown Product';
+    const price = extractPrice(markdown) || null;
+    const image = metadata.ogImage || extractImage(markdown) || null;
+
+    return {
+      name: cleanProductName(name),
+      price,
+      image_url: image,
+      sku: null,
+    };
+  } catch (error) {
+    console.error('Error in scrapeProductPage:', error);
     return null;
   }
+}
 
-  const data = await response.json();
-  return data.data?.json || data.json || null;
+function extractFromMarkdown(markdown: string, pattern: RegExp): string | null {
+  const match = markdown.match(pattern);
+  return match ? match[1].trim() : null;
+}
+
+function extractPrice(markdown: string): string | null {
+  // Match common price patterns like €29,95 or $29.95 or 29,95 EUR
+  const pricePatterns = [
+    /[€$£]\s*\d+[.,]\d{2}/,
+    /\d+[.,]\d{2}\s*[€$£]/,
+    /\d+[.,]\d{2}\s*(EUR|USD|GBP)/i,
+  ];
+  
+  for (const pattern of pricePatterns) {
+    const match = markdown.match(pattern);
+    if (match) return match[0].trim();
+  }
+  return null;
+}
+
+function extractImage(markdown: string): string | null {
+  const imgMatch = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+)/);
+  return imgMatch ? imgMatch[1] : null;
+}
+
+function cleanProductName(name: string): string {
+  // Remove common suffixes like "| Brand Name" or "- Shop Name"
+  return name.replace(/\s*[|\-–—]\s*[^|\-–—]+$/, '').trim();
 }
 
 Deno.serve(async (req) => {
@@ -131,8 +227,9 @@ Deno.serve(async (req) => {
     const competitorConfig: CompetitorConfig = competitorData;
     console.log(`Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
-    // Step 1: Map the site to find all URLs
-    const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
+// Step 1: Scrape the listing page to extract product links
+    console.log('Scraping listing page for product links...');
+    const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -140,27 +237,27 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         url: competitorConfig.scrape_url,
-        limit: 1000,
-        includeSubdomains: false,
+        formats: ['links'],
+        onlyMainContent: false,
       }),
     });
 
-    if (!mapResponse.ok) {
-      const errorData = await mapResponse.json();
-      console.error('Map failed:', errorData);
+    if (!scrapeResponse.ok) {
+      const errorData = await scrapeResponse.json();
+      console.error('Scrape failed:', errorData);
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to map competitor site' }),
+        JSON.stringify({ success: false, error: 'Failed to scrape competitor listing page' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const mapData = await mapResponse.json();
-    const allUrls: string[] = mapData.links || [];
-    console.log(`Found ${allUrls.length} total URLs`);
+    const scrapeData = await scrapeResponse.json();
+    const allUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
+    console.log(`Found ${allUrls.length} total URLs on listing page`);
 
     // Step 2: Filter to product URLs only
     const productUrls = allUrls.filter((url) =>
-      isProductUrl(url, competitorConfig.product_url_patterns)
+      isProductUrl(url, competitorConfig.scrape_url, competitorConfig.product_url_patterns)
     );
     console.log(`Found ${productUrls.length} product URLs`);
 
