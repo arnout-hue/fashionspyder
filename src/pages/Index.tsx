@@ -5,6 +5,7 @@ import { ProductList } from "@/components/ProductList";
 import { SupplierManagement } from "@/components/SupplierManagement";
 import { SupplierOverview } from "@/components/SupplierOverview";
 import { CrawlManagement } from "@/components/CrawlManagement";
+import { ColleagueManagement, Colleague } from "@/components/ColleagueManagement";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -12,13 +13,14 @@ import {
   Supplier,
 } from "@/data/mockData";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [competitors, setCompetitors] = useState<string[]>(["All"]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -74,6 +76,23 @@ const Index = () => {
     }
   }, []);
 
+  // Fetch colleagues from database
+  const fetchColleagues = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('colleagues')
+      .select('*')
+      .order('name');
+    
+    if (error) {
+      console.error('Error fetching colleagues:', error);
+      return;
+    }
+    
+    if (data) {
+      setColleagues(data);
+    }
+  }, []);
+
   // Fetch competitors from database
   useEffect(() => {
     const fetchCompetitors = async () => {
@@ -90,7 +109,8 @@ const Index = () => {
     fetchCompetitors();
     fetchProducts();
     fetchSuppliers();
-  }, [fetchProducts, fetchSuppliers]);
+    fetchColleagues();
+  }, [fetchProducts, fetchSuppliers, fetchColleagues]);
 
   // Filter products by competitor
   const filteredProducts = useMemo(() => {
@@ -294,6 +314,62 @@ const Index = () => {
     );
   };
 
+  // Colleague handlers
+  const handleAddColleague = async (colleague: Omit<Colleague, "id" | "created_at" | "updated_at">) => {
+    const { data, error } = await supabase
+      .from('colleagues')
+      .insert(colleague)
+      .select()
+      .single();
+    
+    if (error) {
+      toast.error('Failed to add colleague');
+      console.error('Error adding colleague:', error);
+      return;
+    }
+    
+    if (data) {
+      setColleagues((prev) => [...prev, data]);
+      toast.success('Colleague added');
+    }
+  };
+
+  const handleUpdateColleague = async (id: string, updates: Partial<Colleague>) => {
+    const { error } = await supabase
+      .from('colleagues')
+      .update(updates)
+      .eq('id', id);
+    
+    if (error) {
+      toast.error('Failed to update colleague');
+      console.error('Error updating colleague:', error);
+      return;
+    }
+    
+    setColleagues((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c
+      )
+    );
+    toast.success('Colleague updated');
+  };
+
+  const handleDeleteColleague = async (id: string) => {
+    const { error } = await supabase
+      .from('colleagues')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      toast.error('Failed to delete colleague');
+      console.error('Error deleting colleague:', error);
+      return;
+    }
+    
+    setColleagues((prev) => prev.filter((c) => c.id !== id));
+    toast.success('Colleague deleted');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation
@@ -375,6 +451,15 @@ const Index = () => {
             onAddSupplier={handleAddSupplier}
             onUpdateSupplier={handleUpdateSupplier}
             onDeleteSupplier={handleDeleteSupplier}
+          />
+        )}
+
+        {currentView === "colleague-management" && (
+          <ColleagueManagement
+            colleagues={colleagues}
+            onAddColleague={handleAddColleague}
+            onUpdateColleague={handleUpdateColleague}
+            onDeleteColleague={handleDeleteColleague}
           />
         )}
       </main>
