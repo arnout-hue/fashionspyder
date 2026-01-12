@@ -30,57 +30,64 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
       return patterns.some((pattern) => path.includes(pattern.toLowerCase()));
     }
     
-    // List of known non-product path segments
-    const nonProductSegments = [
-      'collections', 'collection', 'category', 'categories',
-      'nieuw', 'new', 'new-arrivals', 'newarrivals',
-      'shop', 'kleding', 'clothing', 'dames', 'heren',
-      'cart', 'checkout', 'account', 'login', 'wishlist',
-      'search', 'filter', 'sort', 'page',
-      'sale', 'party', 'back-in-stock', 'bestsellers',
-      'accessoires', 'accessories', 'schoenen', 'shoes', 'tassen', 'bags',
-      'giftcard', 'gift-card', 'campagnes', 'campaigns',
-      'trends', 'lookbook', 'brand', 'brands',
-      'info', 'customer', 'returns', 'shipping',
-      'privacy', 'terms', 'faq', 'contact', 'about',
-      'blog', 'news', 'magazine', 'inspiratie'
+    // List of known non-product path patterns (explicit exclusions)
+    const nonProductPatterns = [
+      '/collections/', '/collection/', '/category/', '/categories/',
+      '/nieuw/', '/new/', '/new-arrivals/', '/newarrivals/',
+      '/shop/', '/kleding/', '/clothing/', '/dames/', '/heren/',
+      '/cart', '/checkout', '/account', '/login', '/wishlist',
+      '/search', '/filter', '/sort', '/page/',
+      '/sale/', '/party/', '/back-in-stock/', '/bestsellers/',
+      '/accessoires/', '/accessories/', '/schoenen/', '/shoes/', '/tassen/', '/bags/',
+      '/giftcard', '/gift-card', '/campagnes/', '/campaigns/',
+      '/trends/', '/lookbook/', '/brand/', '/brands/',
+      '/info/', '/customer/', '/returns/', '/shipping/',
+      '/privacy', '/terms', '/faq', '/contact', '/about',
+      '/blog/', '/news/', '/magazine/', '/inspiratie/',
+      '/selected/', '/petite/', '/tall/', '/gift-guide/',
+      '/pre-order/', '/scuba/', '/denim/', '/lace/', '/burgundy/',
+      '/julie/', '/winter/', '/fall/', '/styles/', '/full-body/',
+      '/playsuits/', '/jumpsuits/', '/co-ord/', '/tops/', '/dresses/'
     ];
     
-    // Check if path contains any non-product segment
-    const pathSegments = path.split('/').filter(Boolean);
-    
-    // Most category pages have 1-2 segments: /kleding/ or /kleding/jurken/
-    // Product pages typically have a unique identifier
-    const lastSegment = pathSegments[pathSegments.length - 1] || '';
-    
-    // Check if any segment is a known non-product segment
-    for (const segment of pathSegments) {
-      if (nonProductSegments.includes(segment)) {
+    // Check if path matches any non-product pattern
+    for (const pattern of nonProductPatterns) {
+      // Match pattern at end of path or followed by query/hash
+      if (path.includes(pattern) || path.endsWith(pattern.slice(0, -1))) {
         return false;
       }
     }
     
-    // Product URLs typically contain:
-    // 1. A numeric product ID: /29579330906-vesten-bruin/
-    // 2. A "products" or "p" path: /products/my-product or /p/12345
-    // 3. HTML extension: /product-name.html
+    // Exclude paths that end with just /collections/something (category pages)
+    if (/\/collections\/[^/]+\/?$/.test(path) && !path.includes('/products/')) {
+      return false;
+    }
     
-    // Check for numeric ID pattern (5+ digits followed by dash and text)
+    // Product URLs typically contain:
+    // 1. Shopify products path: /products/product-name
+    if (path.includes('/products/') && !path.endsWith('/products/') && !path.endsWith('/products')) {
+      return true;
+    }
+    
+    // 2. A numeric product ID: /29579330906-vesten-bruin/
+    const pathSegments = path.split('/').filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1] || '';
+    
     if (/^\d{5,}-/.test(lastSegment)) {
       return true;
     }
     
-    // Check for products path
-    if (pathSegments.includes('products') || pathSegments.includes('product') || pathSegments.includes('p')) {
+    // 3. Product/p path segments
+    if (pathSegments.includes('product') || pathSegments.includes('p')) {
       return true;
     }
     
-    // Check for .html extension with product-like slug
+    // 4. HTML extension with product-like slug
     if (lastSegment.endsWith('.html') && lastSegment.length > 10) {
       return true;
     }
     
-    // Check for item/artikel paths
+    // 5. Item/artikel paths
     if (pathSegments.includes('item') || pathSegments.includes('artikel')) {
       return true;
     }
