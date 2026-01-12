@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { competitors } from "@/data/mockData";
 import logo from "@/assets/logo.png";
 
 type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "settings";
@@ -21,6 +20,7 @@ interface NavigationProps {
   pendingCount: number;
   selectedCompetitor: string;
   onCompetitorChange: (competitor: string) => void;
+  competitors: string[];
 }
 
 export const Navigation = ({
@@ -31,6 +31,7 @@ export const Navigation = ({
   pendingCount,
   selectedCompetitor,
   onCompetitorChange,
+  competitors,
 }: NavigationProps) => {
   const navItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
     {

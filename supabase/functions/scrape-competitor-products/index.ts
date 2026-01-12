@@ -6,41 +6,30 @@ const corsHeaders = {
 };
 
 interface CompetitorConfig {
+  id: string;
   name: string;
-  baseUrl: string;
-  productPatterns: RegExp[];
+  scrape_url: string;
+  logo_url: string | null;
+  product_url_patterns: string[];
+  excluded_categories: string[];
 }
 
-const COMPETITORS: CompetitorConfig[] = [
-  {
-    name: 'Loavies',
-    baseUrl: 'https://loavies.com/nl',
-    productPatterns: [/\/nl\/[a-z-]+-\d+\.html/i, /\/nl\/p-/i],
-  },
-  {
-    name: 'My Jewellery',
-    baseUrl: 'https://www.my-jewellery.com/nl',
-    productPatterns: [/\/nl\/[a-z-]+-[a-z0-9]+$/i, /\/producten\//i],
-  },
-  {
-    name: 'Tess V',
-    baseUrl: 'https://www.tessv.nl',
-    productPatterns: [/\/product\//i, /\/kleding\//i, /\/accessoires\//i],
-  },
-  {
-    name: 'Most Wanted',
-    baseUrl: 'https://www.mostwanted.nl',
-    productPatterns: [/\/product\//i, /\/kleding\//i],
-  },
-  {
-    name: 'Olivia Kate',
-    baseUrl: 'https://oliviakate.nl',
-    productPatterns: [/\/product\//i, /\/kleding\//i, /\/sieraden\//i],
-  },
-];
+function isProductUrl(url: string, patterns: string[]): boolean {
+  if (!patterns || patterns.length === 0) {
+    // Default pattern matching for common e-commerce URLs
+    return /\/product[s]?\//i.test(url) || 
+           /\/collection[s]?\//i.test(url) ||
+           /\/p\//i.test(url) ||
+           /\.(html|php)$/i.test(url);
+  }
+  return patterns.some((pattern) => url.toLowerCase().includes(pattern.toLowerCase()));
+}
 
-function isProductUrl(url: string, patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(url));
+function shouldExcludeProduct(url: string, name: string, excludedCategories: string[]): boolean {
+  if (!excludedCategories || excludedCategories.length === 0) return false;
+  
+  const searchText = `${url} ${name}`.toLowerCase();
+  return excludedCategories.some((cat) => searchText.includes(cat.toLowerCase()));
 }
 
 async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
@@ -64,6 +53,7 @@ async function scrapeProductPage(url: string, apiKey: string): Promise<any> {
               price: { type: 'string', description: 'Product price including currency symbol' },
               sku: { type: 'string', description: 'Product SKU, EAN, or article number' },
               image_url: { type: 'string', description: 'Main product image URL' },
+              category: { type: 'string', description: 'Product category' },
             },
             required: ['name'],
           },
@@ -92,7 +82,7 @@ Deno.serve(async (req) => {
 
     if (!competitor) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Competitor name is required' }),
+        JSON.stringify({ success: false, error: 'Competitor ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -109,21 +99,37 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const competitorConfig = COMPETITORS.find(
-      (c) => c.name.toLowerCase() === competitor.toLowerCase()
-    );
+    // Fetch competitor from database
+    const { data: competitorData, error: competitorError } = await supabase
+      .from('competitors')
+      .select('*')
+      .eq('id', competitor)
+      .single();
 
-    if (!competitorConfig) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Unknown competitor: ${competitor}. Available: ${COMPETITORS.map(c => c.name).join(', ')}` 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (competitorError || !competitorData) {
+      console.log('Competitor not found by ID, trying by name...');
+      // Fallback to name-based lookup for backwards compatibility
+      const { data: competitorByName, error: nameError } = await supabase
+        .from('competitors')
+        .select('*')
+        .ilike('name', competitor)
+        .single();
+
+      if (nameError || !competitorByName) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Competitor not found: ${competitor}` 
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      Object.assign(competitorData || {}, competitorByName);
     }
 
-    console.log(`Starting crawl for ${competitorConfig.name} at ${competitorConfig.baseUrl}`);
+    const competitorConfig: CompetitorConfig = competitorData;
+    console.log(`Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
     // Step 1: Map the site to find all URLs
     const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
@@ -133,7 +139,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: competitorConfig.baseUrl,
+        url: competitorConfig.scrape_url,
         limit: 1000,
         includeSubdomains: false,
       }),
@@ -154,7 +160,7 @@ Deno.serve(async (req) => {
 
     // Step 2: Filter to product URLs only
     const productUrls = allUrls.filter((url) =>
-      isProductUrl(url, competitorConfig.productPatterns)
+      isProductUrl(url, competitorConfig.product_url_patterns)
     );
     console.log(`Found ${productUrls.length} product URLs`);
 
@@ -171,6 +177,7 @@ Deno.serve(async (req) => {
     // Step 4: Scrape new products (limited)
     const urlsToScrape = newProductUrls.slice(0, limit);
     const scrapedProducts: any[] = [];
+    const skippedProducts: string[] = [];
     const errors: string[] = [];
 
     for (const url of urlsToScrape) {
@@ -178,6 +185,13 @@ Deno.serve(async (req) => {
         const productData = await scrapeProductPage(url, apiKey);
         
         if (productData && productData.name) {
+          // Check if product should be excluded based on category filters
+          if (shouldExcludeProduct(url, productData.name, competitorConfig.excluded_categories)) {
+            console.log(`Excluded product (category filter): ${productData.name}`);
+            skippedProducts.push(url);
+            continue;
+          }
+
           scrapedProducts.push({
             name: productData.name,
             price: productData.price || null,
@@ -197,7 +211,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Scraped ${scrapedProducts.length} products successfully`);
+    console.log(`Scraped ${scrapedProducts.length} products successfully, skipped ${skippedProducts.length}`);
 
     // Step 5: Insert new products into database
     if (scrapedProducts.length > 0) {
@@ -217,6 +231,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Update last_crawled_at
+    await supabase
+      .from('competitors')
+      .update({ last_crawled_at: new Date().toISOString() })
+      .eq('id', competitorConfig.id);
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -226,6 +246,7 @@ Deno.serve(async (req) => {
           productUrlsFound: productUrls.length,
           newProductUrls: newProductUrls.length,
           scrapedCount: scrapedProducts.length,
+          skippedCount: skippedProducts.length,
           errorsCount: errors.length,
         },
       }),

@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { DiscoverView } from "@/components/DiscoverView";
 import { ProductList } from "@/components/ProductList";
 import { SupplierManagement } from "@/components/SupplierManagement";
 import { SupplierOverview } from "@/components/SupplierOverview";
 import { CrawlManagement } from "@/components/CrawlManagement";
+import { supabase } from "@/integrations/supabase/client";
 import {
   mockProducts,
   mockSuppliers,
@@ -19,6 +20,23 @@ const Index = () => {
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
   const [products, setProducts] = useState<Product[]>(mockProducts);
   const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers);
+  const [competitors, setCompetitors] = useState<string[]>(["All"]);
+
+  // Fetch competitors from database
+  useEffect(() => {
+    const fetchCompetitors = async () => {
+      const { data } = await supabase
+        .from('competitors')
+        .select('name')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (data) {
+        setCompetitors(["All", ...data.map(c => c.name)]);
+      }
+    };
+    fetchCompetitors();
+  }, []);
 
   // Filter products by competitor
   const filteredProducts = useMemo(() => {
@@ -129,6 +147,7 @@ const Index = () => {
         pendingCount={pendingProducts.length}
         selectedCompetitor={selectedCompetitor}
         onCompetitorChange={setSelectedCompetitor}
+        competitors={competitors}
       />
 
       <main className="container py-8">

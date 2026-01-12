@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      competitors: {
+        Row: {
+          created_at: string
+          excluded_categories: string[] | null
+          id: string
+          is_active: boolean | null
+          last_crawled_at: string | null
+          logo_url: string | null
+          name: string
+          notes: string | null
+          product_url_patterns: string[] | null
+          scrape_url: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          excluded_categories?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          last_crawled_at?: string | null
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          product_url_patterns?: string[] | null
+          scrape_url: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          excluded_categories?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          last_crawled_at?: string | null
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          product_url_patterns?: string[] | null
+          scrape_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           competitor: string

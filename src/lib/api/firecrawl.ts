@@ -47,10 +47,10 @@ export const firecrawlApi = {
     return data;
   },
 
-  // Scrape all products from a competitor
-  async scrapeCompetitor(competitor: string, limit?: number): Promise<FirecrawlResponse> {
+  // Scrape all products from a competitor (by ID or name)
+  async scrapeCompetitor(competitorId: string, limit?: number): Promise<FirecrawlResponse> {
     const { data, error } = await supabase.functions.invoke('scrape-competitor-products', {
-      body: { competitor, limit },
+      body: { competitor: competitorId, limit },
     });
 
     if (error) {
@@ -59,12 +59,3 @@ export const firecrawlApi = {
     return data;
   },
 };
-
-// Competitor configuration for the UI
-export const COMPETITORS = [
-  { name: 'Loavies', baseUrl: 'https://loavies.com/nl' },
-  { name: 'My Jewellery', baseUrl: 'https://www.my-jewellery.com/nl' },
-  { name: 'Tess V', baseUrl: 'https://www.tessv.nl' },
-  { name: 'Most Wanted', baseUrl: 'https://www.mostwanted.nl' },
-  { name: 'Olivia Kate', baseUrl: 'https://oliviakate.nl' },
-] as const;
