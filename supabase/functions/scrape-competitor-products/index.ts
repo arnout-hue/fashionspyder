@@ -25,9 +25,23 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
       return false;
     }
     
-    // If custom patterns are defined, use them exclusively
+    // If custom patterns are defined, use them
     if (patterns && patterns.length > 0) {
-      return patterns.some((pattern) => path.includes(pattern.toLowerCase()));
+      const matchesPattern = patterns.some((pattern) => {
+        const lowerPattern = pattern.toLowerCase();
+        // Support regex patterns (starts with ^)
+        if (lowerPattern.startsWith('^')) {
+          try {
+            const regex = new RegExp(lowerPattern);
+            return regex.test(path);
+          } catch {
+            return path.includes(lowerPattern);
+          }
+        }
+        return path.includes(lowerPattern);
+      });
+      
+      if (!matchesPattern) return false;
     }
     
     // List of known non-product path patterns (explicit exclusions)
@@ -45,17 +59,20 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
       '/privacy', '/terms', '/faq', '/contact', '/about',
       '/blog/', '/news/', '/magazine/', '/inspiratie/',
       '/selected/', '/petite/', '/tall/', '/gift-guide/',
-      '/pre-order/', '/scuba/', '/denim/', '/lace/', '/burgundy/',
-      '/julie/', '/winter/', '/fall/', '/styles/', '/full-body/',
-      '/playsuits/', '/jumpsuits/', '/co-ord/', '/tops/', '/dresses/'
+      '/pre-order/', '/promo/', '/levering/', '/bestellen/', '/retourneren/',
+      '/cookiebeleid', '/privacyverklaring'
     ];
     
     // Check if path matches any non-product pattern
     for (const pattern of nonProductPatterns) {
-      // Match pattern at end of path or followed by query/hash
       if (path.includes(pattern) || path.endsWith(pattern.slice(0, -1))) {
         return false;
       }
+    }
+    
+    // If patterns were specified and matched, it's a product
+    if (patterns && patterns.length > 0) {
+      return true;
     }
     
     // Exclude paths that end with just /collections/something (category pages)
@@ -287,6 +304,7 @@ Deno.serve(async (req) => {
         url: competitorConfig.scrape_url,
         formats: ['links'],
         onlyMainContent: false,
+        waitFor: 3000, // Wait for JS-rendered content
       }),
     });
 
