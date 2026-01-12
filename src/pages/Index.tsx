@@ -404,6 +404,7 @@ const Index = () => {
             <ProductList
               products={positiveProducts}
               suppliers={suppliers}
+              colleagues={colleagues}
               type="positive"
               onUpdateProduct={handleUpdateProduct}
               onMoveProduct={handleMoveProduct}

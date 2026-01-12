@@ -90,6 +90,26 @@ export const emailApi = {
     return data;
   },
 
+  // Send colleague email with product selection
+  async sendColleagueEmail(
+    colleagueId: string,
+    colleagueEmail: string,
+    colleagueName: string,
+    products: Product[],
+    senderName?: string,
+    customMessage?: string,
+    subject?: string
+  ): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase.functions.invoke('send-colleague-email', {
+      body: { colleagueId, colleagueEmail, colleagueName, products, senderName, customMessage, subject },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
   // Send notification email
   async sendNotification(
     recipientEmail: string,
