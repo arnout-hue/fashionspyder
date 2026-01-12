@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
-import { Globe, Loader2, Play, CheckCircle2, XCircle, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save } from 'lucide-react';
+import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3 } from 'lucide-react';
 
 // URL validation helper
 function isValidHttpUrl(url: string): boolean {
@@ -51,6 +51,19 @@ interface CrawlStatus {
   };
 }
 
+interface CrawlHistoryRecord {
+  id: string;
+  competitor_id: string;
+  crawled_at: string;
+  status: string;
+  total_urls_found: number;
+  product_urls_found: number;
+  new_products_scraped: number;
+  skipped_count: number;
+  errors_count: number;
+  error_message: string | null;
+}
+
 const DEFAULT_EXCLUDED_CATEGORIES = [
   'accessories', 'bags', 'belts', 'earrings', 'jewelry', 'jewellery', 
   'sieraden', 'tassen', 'riemen', 'oorbellen', 'necklaces', 'bracelets', 
@@ -63,6 +76,7 @@ export const CrawlManagement = () => {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [crawlStatuses, setCrawlStatuses] = useState<Record<string, CrawlStatus>>({});
+  const [crawlHistory, setCrawlHistory] = useState<Record<string, CrawlHistoryRecord>>({});
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
   const [isBulkCrawling, setIsBulkCrawling] = useState(false);
@@ -80,11 +94,29 @@ export const CrawlManagement = () => {
     excluded_categories: DEFAULT_EXCLUDED_CATEGORIES.join(', '),
   });
 
-  useEffect(() => {
-    fetchCompetitors();
+  const fetchCrawlHistory = useCallback(async (competitorIds: string[]) => {
+    if (competitorIds.length === 0) return;
+    
+    // Get the latest crawl for each competitor
+    const { data, error } = await supabase
+      .from('crawl_history')
+      .select('*')
+      .in('competitor_id', competitorIds)
+      .order('crawled_at', { ascending: false });
+    
+    if (!error && data) {
+      // Group by competitor_id and keep only the latest
+      const latestByCompetitor: Record<string, CrawlHistoryRecord> = {};
+      data.forEach((record: CrawlHistoryRecord) => {
+        if (!latestByCompetitor[record.competitor_id]) {
+          latestByCompetitor[record.competitor_id] = record;
+        }
+      });
+      setCrawlHistory(latestByCompetitor);
+    }
   }, []);
 
-  const fetchCompetitors = async () => {
+  const fetchCompetitors = useCallback(async () => {
     const { data, error } = await supabase
       .from('competitors')
       .select('*')
@@ -98,9 +130,13 @@ export const CrawlManagement = () => {
       });
     } else {
       setCompetitors(data || []);
+      // Fetch crawl history for all competitors
+      if (data && data.length > 0) {
+        await fetchCrawlHistory(data.map((c: Competitor) => c.id));
+      }
     }
     setLoading(false);
-  };
+  }, [toast, fetchCrawlHistory]);
 
   const resetForm = () => {
     setFormData({
@@ -265,6 +301,26 @@ export const CrawlManagement = () => {
     setEditingCompetitor(competitor);
   };
 
+  const saveCrawlHistory = async (
+    competitorId: string,
+    status: 'success' | 'error' | 'partial',
+    results?: CrawlStatus['results'],
+    errorMessage?: string
+  ) => {
+    const record = {
+      competitor_id: competitorId,
+      status,
+      total_urls_found: results?.totalUrlsFound || 0,
+      product_urls_found: results?.productUrlsFound || 0,
+      new_products_scraped: results?.scrapedCount || 0,
+      skipped_count: results?.skippedCount || 0,
+      errors_count: results?.errorsCount || 0,
+      error_message: errorMessage || null,
+    };
+
+    await supabase.from('crawl_history').insert(record);
+  };
+
   const handleCrawl = async (competitor: Competitor) => {
     setCrawlStatuses((prev) => ({
       ...prev,
@@ -285,6 +341,9 @@ export const CrawlManagement = () => {
           },
         }));
 
+        // Save to crawl history
+        await saveCrawlHistory(competitor.id, 'success', response.data);
+
         // Update last_crawled_at
         await supabase
           .from('competitors')
@@ -302,6 +361,9 @@ export const CrawlManagement = () => {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
+      
+      // Save error to crawl history
+      await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
       
       setCrawlStatuses((prev) => ({
         ...prev,
@@ -359,12 +421,19 @@ export const CrawlManagement = () => {
               results: response.data,
             },
           }));
+          
+          // Save to crawl history
+          await saveCrawlHistory(competitor.id, 'success', response.data);
           successCount++;
         } else {
           throw new Error(response.error || 'Failed to crawl');
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
+        
+        // Save error to crawl history
+        await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
+        
         setCrawlStatuses((prev) => ({
           ...prev,
           [competitor.name]: {
@@ -614,6 +683,7 @@ export const CrawlManagement = () => {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {competitors.map((competitor) => {
             const status = crawlStatuses[competitor.name];
+            const historyRecord = crawlHistory[competitor.id];
             const isCrawling = status?.status === 'crawling';
 
             return (
@@ -690,7 +760,7 @@ export const CrawlManagement = () => {
                   )}
 
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(status?.status || 'idle')}
+                    {getStatusBadge(status?.status || (historyRecord ? 'success' : 'idle'))}
                     {competitor.last_crawled_at && (
                       <span className="text-xs text-muted-foreground">
                         Last: {new Date(competitor.last_crawled_at).toLocaleDateString()}
@@ -707,29 +777,40 @@ export const CrawlManagement = () => {
                     </div>
                   )}
 
-                  {status?.results && (
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div className="rounded-md bg-muted/50 p-2">
-                        <p className="text-muted-foreground text-xs">Found</p>
-                        <p className="font-semibold">{status.results.productUrlsFound}</p>
+                  {/* Show current crawl results OR persistent history */}
+                  {(status?.results || historyRecord) && !isCrawling && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <BarChart3 className="h-3 w-3" />
+                        <span>Last crawl stats</span>
                       </div>
-                      <div className="rounded-md bg-green-500/10 p-2">
-                        <p className="text-green-600 text-xs">Added</p>
-                        <p className="font-semibold text-green-600">
-                          +{status.results.scrapedCount}
-                        </p>
-                      </div>
-                      <div className="rounded-md bg-orange-500/10 p-2">
-                        <p className="text-orange-600 text-xs">Filtered</p>
-                        <p className="font-semibold text-orange-600">
-                          {status.results.skippedCount || 0}
-                        </p>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-md bg-muted/50 p-2">
+                          <p className="text-muted-foreground text-xs">Found</p>
+                          <p className="font-semibold">
+                            {status?.results?.productUrlsFound ?? historyRecord?.product_urls_found ?? 0}
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-green-500/10 p-2">
+                          <p className="text-green-600 text-xs">Added</p>
+                          <p className="font-semibold text-green-600">
+                            +{status?.results?.scrapedCount ?? historyRecord?.new_products_scraped ?? 0}
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-orange-500/10 p-2">
+                          <p className="text-orange-600 text-xs">Filtered</p>
+                          <p className="font-semibold text-orange-600">
+                            {status?.results?.skippedCount ?? historyRecord?.skipped_count ?? 0}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {status?.status === 'error' && (
-                    <p className="text-xs text-destructive">{status.message}</p>
+                  {(status?.status === 'error' || historyRecord?.status === 'error') && (
+                    <p className="text-xs text-destructive">
+                      {status?.message || historyRecord?.error_message}
+                    </p>
                   )}
 
                   <Button

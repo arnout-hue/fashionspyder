@@ -44,7 +44,32 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
       if (!matchesPattern) return false;
     }
     
-    // List of known non-product path patterns (explicit exclusions)
+    // If custom patterns are specified and matched, skip non-product pattern checks
+    // This allows specific patterns like /nl/kleding/ to work without being filtered
+    if (patterns && patterns.length > 0) {
+      // Only check for truly non-product paths (cart, account, etc.)
+      const strictNonProductPatterns = [
+        '/cart', '/checkout', '/account', '/login', '/wishlist',
+        '/search', '/filter', '/sort', '/page/',
+        '/giftcard', '/gift-card',
+        '/info/', '/customer/', '/returns/', '/shipping/',
+        '/privacy', '/terms', '/faq', '/contact', '/about',
+        '/blog/', '/news/', '/magazine/', '/inspiratie/',
+        '/levering/', '/bestellen/', '/retourneren/',
+        '/cookiebeleid', '/privacyverklaring'
+      ];
+      
+      for (const pattern of strictNonProductPatterns) {
+        if (path.includes(pattern) || path.endsWith(pattern.slice(0, -1))) {
+          return false;
+        }
+      }
+      
+      // Patterns matched and not strictly excluded - it's a product
+      return true;
+    }
+    
+    // List of known non-product path patterns (for auto-detection without custom patterns)
     const nonProductPatterns = [
       '/collections/', '/collection/', '/category/', '/categories/',
       '/nieuw/', '/new/', '/new-arrivals/', '/newarrivals/',
