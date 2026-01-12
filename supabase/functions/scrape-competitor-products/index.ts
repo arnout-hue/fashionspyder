@@ -466,41 +466,67 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[v3] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
+    console.log(`[v4] Starting crawl for ${competitorConfig.name} at ${competitorConfig.scrape_url}`);
 
-    // Step 1: Scrape the listing page to extract product links
-    console.log('Scraping listing page for product links...');
-    const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    // Step 1: Use Firecrawl MAP to discover ALL product URLs on the site
+    // This handles pagination automatically and returns up to 5000 URLs
+    const siteOrigin = new URL(competitorConfig.scrape_url).origin;
+    console.log(`Mapping site ${siteOrigin} for all product URLs...`);
+    
+    let allUrls: string[] = [];
+    
+    const mapResponse = await fetch('https://api.firecrawl.dev/v1/map', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: competitorConfig.scrape_url,
-        formats: ['links', 'markdown'],
-        onlyMainContent: false,
-        waitFor: 3000, // Wait for JS-rendered content
+        url: siteOrigin,
+        limit: 2000, // Get up to 2000 URLs
+        includeSubdomains: false,
       }),
     });
 
-    if (!scrapeResponse.ok) {
-      const errorData = await scrapeResponse.json();
-      console.error('Scrape failed:', errorData);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Failed to scrape competitor listing page' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (mapResponse.ok) {
+      const mapData = await mapResponse.json();
+      allUrls = mapData.links || mapData.data?.links || [];
+      console.log(`Map discovered ${allUrls.length} URLs on site`);
+    } else {
+      console.log('Map failed, falling back to scrape...');
+      
+      // Fallback: Scrape the listing page directly
+      const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: competitorConfig.scrape_url,
+          formats: ['links', 'markdown'],
+          onlyMainContent: false,
+          waitFor: 3000,
+        }),
+      });
+
+      if (!scrapeResponse.ok) {
+        const errorData = await scrapeResponse.json();
+        console.error('Scrape failed:', errorData);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to discover products on competitor site' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const scrapeData = await scrapeResponse.json();
+      const linkUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
+      const listingMarkdown: string = scrapeData.data?.markdown || scrapeData.markdown || '';
+      const markdownUrls = listingMarkdown ? extractUrlsFromMarkdown(listingMarkdown) : [];
+      allUrls = Array.from(new Set([...linkUrls, ...markdownUrls]));
     }
-
-    const scrapeData = await scrapeResponse.json();
-
-    const linkUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
-    const listingMarkdown: string = scrapeData.data?.markdown || scrapeData.markdown || '';
-    const markdownUrls = listingMarkdown ? extractUrlsFromMarkdown(listingMarkdown) : [];
-
-    const allUrls: string[] = Array.from(new Set([...linkUrls, ...markdownUrls]));
-    console.log(`Found ${allUrls.length} total URLs on listing page`);
+    
+    console.log(`Found ${allUrls.length} total URLs`);
 
     // Step 2: Filter to product URLs only
     const productUrls = allUrls.filter((url) =>
@@ -511,7 +537,7 @@ Deno.serve(async (req) => {
     if (productUrls.length === 0) {
       const htmlLike = allUrls.filter((u) => u.toLowerCase().includes('.html')).length;
       console.log(`[debug] 0 product URLs. URLs with ".html": ${htmlLike}`);
-      console.log('[debug] Sample listing URLs:', allUrls.slice(0, 25));
+      console.log('[debug] Sample URLs:', allUrls.slice(0, 25));
       console.log('[debug] Patterns:', competitorConfig.product_url_patterns);
     }
 
