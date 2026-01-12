@@ -65,10 +65,18 @@ interface CrawlHistoryRecord {
 }
 
 const DEFAULT_EXCLUDED_CATEGORIES = [
+  // English terms
   'accessories', 'bags', 'belts', 'earrings', 'jewelry', 'jewellery', 
-  'sieraden', 'tassen', 'riemen', 'oorbellen', 'necklaces', 'bracelets', 
-  'rings', 'watches', 'sunglasses', 'hats', 'scarves', 'shoes', 'boots', 
-  'sneakers', 'sandals', 'heels'
+  'necklaces', 'bracelets', 'rings', 'watches', 'sunglasses', 'hats', 
+  'scarves', 'shoes', 'boots', 'sneakers', 'sandals', 'heels', 'socks',
+  'wallet', 'wallets', 'purse', 'clutch', 'backpack', 'hairclip', 'headband',
+  // Dutch terms
+  'sieraden', 'tassen', 'riemen', 'oorbellen', 'armbanden', 'armband',
+  'kettingen', 'ketting', 'ringen', 'ring', 'horloges', 'horloge',
+  'zonnebrillen', 'zonnebril', 'hoeden', 'hoed', 'sjaals', 'sjaal',
+  'schoenen', 'laarzen', 'hakken', 'sandalen', 'sokken', 'portemonnee',
+  'rugzak', 'haarclip', 'haarband', 'accessoire', 'accessoires',
+  'oorbel', 'tas', 'riem', 'handtas', 'clutch', 'slippers'
 ];
 
 export const CrawlManagement = () => {
