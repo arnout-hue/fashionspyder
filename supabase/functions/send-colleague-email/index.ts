@@ -8,6 +8,33 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// HTML escape function to prevent XSS attacks
+function escapeHtml(text: string): string {
+  if (!text) return '';
+  return text.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[m] || m));
+}
+
+// Validate and sanitize URL
+function sanitizeUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // Only allow http and https protocols
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '';
+    }
+    return escapeHtml(url);
+  } catch {
+    return '';
+  }
+}
+
 interface Product {
   id: string;
   name: string;
@@ -76,25 +103,39 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate product HTML
-    const productRows = products.map(p => `
+    // Escape all user-provided content
+    const safeColleagueName = escapeHtml(colleagueName);
+    const safeSenderName = escapeHtml(senderName);
+    const safeCustomMessage = customMessage ? escapeHtml(customMessage) : null;
+
+    // Generate product HTML with escaped content
+    const productRows = products.map(p => {
+      const safeName = escapeHtml(p.name);
+      const safeCompetitor = escapeHtml(p.competitor);
+      const safePrice = p.price ? escapeHtml(p.price) : '';
+      const safeNotes = escapeHtml(p.notes || '-');
+      const safeProductUrl = sanitizeUrl(p.product_url);
+      const safeImageUrl = sanitizeUrl(p.image_url || '');
+      
+      return `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #eee;">
-          ${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
+          ${safeImageUrl ? `<img src="${safeImageUrl}" alt="${safeName}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #eee;">
-          <strong>${p.name}</strong><br>
-          <span style="color: #666; font-size: 12px;">${p.competitor}</span>
-          ${p.price ? `<br><span style="color: #333;">${p.price}</span>` : ''}
+          <strong>${safeName}</strong><br>
+          <span style="color: #666; font-size: 12px;">${safeCompetitor}</span>
+          ${safePrice ? `<br><span style="color: #333;">${safePrice}</span>` : ''}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #eee;">
-          <a href="${p.product_url}" style="color: #2563eb;">View Product</a>
+          ${safeProductUrl ? `<a href="${safeProductUrl}" style="color: #2563eb;">View Product</a>` : '-'}
         </td>
         <td style="padding: 12px; border-bottom: 1px solid #eee; font-size: 12px; color: #666;">
-          ${p.notes || '-'}
+          ${safeNotes}
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -106,9 +147,9 @@ Deno.serve(async (req) => {
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
         <h1 style="color: #1a1a1a;">Product Selection</h1>
         
-        <p>Hi ${colleagueName},</p>
+        <p>Hi ${safeColleagueName},</p>
         
-        ${customMessage ? `<p>${customMessage}</p>` : `<p>Here's a selection of products for your review:</p>`}
+        ${safeCustomMessage ? `<p>${safeCustomMessage}</p>` : `<p>Here's a selection of products for your review:</p>`}
         
         <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
           <thead>
@@ -126,7 +167,7 @@ Deno.serve(async (req) => {
         
         <p>Total items: <strong>${products.length}</strong></p>
         
-        <p>Best regards,<br>${senderName}</p>
+        <p>Best regards,<br>${safeSenderName}</p>
         
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
         <p style="font-size: 12px; color: #6b7280;">This email was sent via FashionSpyder product sourcing platform.</p>
@@ -134,7 +175,7 @@ Deno.serve(async (req) => {
       </html>
     `;
 
-    console.log(`Sending email to colleague ${colleagueEmail} with ${products.length} products`);
+    console.log(`Sending email to colleague with ${products.length} products`);
 
     const emailResponse = await resend.emails.send({
       from: "FashionSpyder <spidey@fashionspyder.nl>",
@@ -143,7 +184,7 @@ Deno.serve(async (req) => {
       html: emailHtml,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("Email sent successfully");
 
     return new Response(
       JSON.stringify({ success: true, data: emailResponse }),

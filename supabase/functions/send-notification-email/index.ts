@@ -1,4 +1,5 @@
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -6,6 +7,33 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// HTML escape function to prevent XSS attacks
+function escapeHtml(text: string): string {
+  if (!text) return '';
+  return text.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[m] || m));
+}
+
+// Validate and sanitize URL
+function sanitizeUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // Only allow http and https protocols
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '';
+    }
+    return escapeHtml(url);
+  } catch {
+    return '';
+  }
+}
 
 interface NotificationRequest {
   recipientEmail: string;
@@ -26,6 +54,31 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await authSupabase.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { recipientEmail, subject, competitorName, newProductsCount, products = [] }: NotificationRequest = await req.json();
 
     if (!recipientEmail || !competitorName) {
@@ -35,17 +88,27 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate product preview HTML (show max 5)
+    // Escape user-provided content
+    const safeCompetitorName = escapeHtml(competitorName);
+    const safeSubject = escapeHtml(subject);
+
+    // Generate product preview HTML (show max 5) with escaped content
     const previewProducts = products.slice(0, 5);
-    const productPreviewHtml = previewProducts.map(p => `
+    const productPreviewHtml = previewProducts.map(p => {
+      const safeName = escapeHtml(p.name);
+      const safePrice = p.price ? escapeHtml(p.price) : '';
+      const safeImageUrl = sanitizeUrl(p.image_url || '');
+      
+      return `
       <div style="display: flex; align-items: center; padding: 12px; border-bottom: 1px solid #eee;">
-        ${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; margin-right: 12px;">` : '<div style="width: 50px; height: 50px; background: #f3f4f6; border-radius: 4px; margin-right: 12px;"></div>'}
+        ${safeImageUrl ? `<img src="${safeImageUrl}" alt="${safeName}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; margin-right: 12px;">` : '<div style="width: 50px; height: 50px; background: #f3f4f6; border-radius: 4px; margin-right: 12px;"></div>'}
         <div>
-          <strong style="display: block;">${p.name}</strong>
-          ${p.price ? `<span style="color: #666; font-size: 14px;">${p.price}</span>` : ''}
+          <strong style="display: block;">${safeName}</strong>
+          ${safePrice ? `<span style="color: #666; font-size: 14px;">${safePrice}</span>` : ''}
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -59,7 +122,7 @@ Deno.serve(async (req) => {
           <h1 style="color: #1a1a1a; margin-top: 0;">🆕 New Products Found!</h1>
           
           <p style="font-size: 16px; color: #4b5563;">
-            We found <strong style="color: #2563eb;">${newProductsCount} new products</strong> from <strong>${competitorName}</strong>.
+            We found <strong style="color: #2563eb;">${newProductsCount} new products</strong> from <strong>${safeCompetitorName}</strong>.
           </p>
           
           ${productPreviewHtml ? `
@@ -85,16 +148,16 @@ Deno.serve(async (req) => {
       </html>
     `;
 
-    console.log(`Sending notification to ${recipientEmail} - ${newProductsCount} new products from ${competitorName}`);
+    console.log(`Sending notification - ${newProductsCount} new products from ${safeCompetitorName}`);
 
     const emailResponse = await resend.emails.send({
       from: "FashionSpyder <spidey@fashionspyder.nl>",
       to: [recipientEmail],
-      subject: subject || `${newProductsCount} new products from ${competitorName}`,
+      subject: safeSubject || `${newProductsCount} new products from ${safeCompetitorName}`,
       html: emailHtml,
     });
 
-    console.log("Notification sent successfully:", emailResponse);
+    console.log("Notification sent successfully");
 
     return new Response(
       JSON.stringify({ success: true, data: emailResponse }),
