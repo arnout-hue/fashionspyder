@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Navigation } from "@/components/Navigation";
 import { DiscoverView } from "@/components/DiscoverView";
 import { ProductList } from "@/components/ProductList";
@@ -6,8 +6,8 @@ import { SupplierManagement } from "@/components/SupplierManagement";
 import { SupplierOverview } from "@/components/SupplierOverview";
 import { CrawlManagement } from "@/components/CrawlManagement";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import {
-  mockProducts,
   mockSuppliers,
   Product,
   Supplier,
@@ -18,9 +18,45 @@ type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "setting
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers);
   const [competitors, setCompetitors] = useState<string[]>(["All"]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch products from database
+  const fetchProducts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Failed to load products');
+      return;
+    }
+    
+    if (data) {
+      // Map database fields to Product interface
+      const mappedProducts: Product[] = data.map(p => ({
+        id: p.id,
+        name: p.name,
+        competitor: p.competitor,
+        price: p.price || undefined,
+        image_url: p.image_url || undefined,
+        product_url: p.product_url,
+        sku: p.sku || undefined,
+        status: p.status as "pending" | "positive" | "negative" | "requested",
+        supplier_id: p.supplier_id || undefined,
+        notes: p.notes || undefined,
+        is_sent: p.is_sent,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      }));
+      setProducts(mappedProducts);
+    }
+    setIsLoading(false);
+  }, []);
 
   // Fetch competitors from database
   useEffect(() => {
@@ -36,7 +72,8 @@ const Index = () => {
       }
     };
     fetchCompetitors();
-  }, []);
+    fetchProducts();
+  }, [fetchProducts]);
 
   // Filter products by competitor
   const filteredProducts = useMemo(() => {
@@ -49,8 +86,18 @@ const Index = () => {
   const positiveProducts = filteredProducts.filter((p) => p.status === "positive");
   const negativeProducts = filteredProducts.filter((p) => p.status === "negative");
 
-  // Handlers
-  const handleSwipeRight = (product: Product) => {
+  // Handlers - update database and local state
+  const handleSwipeRight = async (product: Product) => {
+    const { error } = await supabase
+      .from('products')
+      .update({ status: 'positive' })
+      .eq('id', product.id);
+    
+    if (error) {
+      toast.error('Failed to update product');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) =>
         p.id === product.id ? { ...p, status: "positive" } : p
@@ -58,7 +105,17 @@ const Index = () => {
     );
   };
 
-  const handleSwipeLeft = (product: Product) => {
+  const handleSwipeLeft = async (product: Product) => {
+    const { error } = await supabase
+      .from('products')
+      .update({ status: 'negative' })
+      .eq('id', product.id);
+    
+    if (error) {
+      toast.error('Failed to update product');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) =>
         p.id === product.id ? { ...p, status: "negative" } : p
@@ -66,34 +123,79 @@ const Index = () => {
     );
   };
 
-  const handleBulkStatusChange = (productIds: string[], status: "positive" | "negative" | "pending") => {
+  const handleBulkStatusChange = async (productIds: string[], status: "positive" | "negative" | "pending") => {
+    const { error } = await supabase
+      .from('products')
+      .update({ 
+        status, 
+        supplier_id: status === "pending" ? null : undefined 
+      })
+      .in('id', productIds);
+    
+    if (error) {
+      toast.error('Failed to update products');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) =>
-        productIds.includes(p.id) ? { ...p, status, supplier_id: status === "pending" ? null : p.supplier_id } : p
+        productIds.includes(p.id) ? { ...p, status, supplier_id: status === "pending" ? undefined : p.supplier_id } : p
       )
     );
+    toast.success(`${productIds.length} products moved to ${status}`);
   };
 
-  const handleBulkAssignSupplier = (productIds: string[], supplierId: string) => {
+  const handleBulkAssignSupplier = async (productIds: string[], supplierId: string) => {
+    const { error } = await supabase
+      .from('products')
+      .update({ supplier_id: supplierId })
+      .in('id', productIds);
+    
+    if (error) {
+      toast.error('Failed to assign supplier');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) =>
         productIds.includes(p.id) ? { ...p, supplier_id: supplierId } : p
       )
     );
+    toast.success(`Supplier assigned to ${productIds.length} products`);
   };
 
-  const handleUpdateProduct = (productId: string, updates: Partial<Product>) => {
+  const handleUpdateProduct = async (productId: string, updates: Partial<Product>) => {
+    const { error } = await supabase
+      .from('products')
+      .update(updates)
+      .eq('id', productId);
+    
+    if (error) {
+      toast.error('Failed to update product');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) => (p.id === productId ? { ...p, ...updates } : p))
     );
   };
 
-  const handleMoveProduct = (product: Product) => {
+  const handleMoveProduct = async (product: Product) => {
     const newStatus = product.status === "positive" ? "negative" : "positive";
+    const { error } = await supabase
+      .from('products')
+      .update({ status: newStatus, supplier_id: null, notes: null })
+      .eq('id', product.id);
+    
+    if (error) {
+      toast.error('Failed to move product');
+      return;
+    }
+    
     setProducts((prev) =>
       prev.map((p) =>
         p.id === product.id
-          ? { ...p, status: newStatus, supplier_id: null, notes: null }
+          ? { ...p, status: newStatus, supplier_id: undefined, notes: undefined }
           : p
       )
     );
