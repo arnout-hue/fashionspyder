@@ -259,9 +259,6 @@ export const Navigation = ({
           </DropdownMenu>
         </div>
       </nav>
-
-      {/* Spacer for mobile bottom nav */}
-      <div className="h-16 md:hidden" />
     </>
   );
 };
