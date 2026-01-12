@@ -17,8 +17,16 @@ interface CompetitorConfig {
 
 function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): boolean {
   try {
-    const urlObj = new URL(url);
+    // Firecrawl "links" can include relative URLs (e.g. "/nl/kleding/..."),
+    // so always resolve against the competitor listing URL.
+    const urlObj = new URL(url, baseUrl);
     const path = urlObj.pathname.toLowerCase();
+
+    // Heuristic: some shops (e.g. Tess V / Shopware) use .html product pages.
+    // If it looks like a product detail URL, treat it as product even when custom patterns are set.
+    if (path.endsWith('.html') && /\/\d{5,}-[^/]+\.html$/.test(path)) {
+      return true;
+    }
     
     // Exclude homepage and very short paths
     if (path === '/' || path === '/nl/' || path === '/nl' || path.length < 5) {
@@ -68,7 +76,7 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
       // Patterns matched and not strictly excluded - it's a product
       return true;
     }
-    
+
     // List of known non-product path patterns (for auto-detection without custom patterns)
     const nonProductPatterns = [
       '/collections/', '/collection/', '/category/', '/categories/',
@@ -94,50 +102,64 @@ function isProductUrl(url: string, baseUrl: string, patterns: string[] | null): 
         return false;
       }
     }
-    
-    // If patterns were specified and matched, it's a product
-    if (patterns && patterns.length > 0) {
-      return true;
-    }
-    
+
     // Exclude paths that end with just /collections/something (category pages)
     if (/\/collections\/[^/]+\/?$/.test(path) && !path.includes('/products/')) {
       return false;
     }
-    
+
     // Product URLs typically contain:
     // 1. Shopify products path: /products/product-name
     if (path.includes('/products/') && !path.endsWith('/products/') && !path.endsWith('/products')) {
       return true;
     }
-    
+
     // 2. A numeric product ID: /29579330906-vesten-bruin/
     const pathSegments = path.split('/').filter(Boolean);
     const lastSegment = pathSegments[pathSegments.length - 1] || '';
-    
+
     if (/^\d{5,}-/.test(lastSegment)) {
       return true;
     }
-    
+
     // 3. Product/p path segments
     if (pathSegments.includes('product') || pathSegments.includes('p')) {
       return true;
     }
-    
+
     // 4. HTML extension with product-like slug
     if (lastSegment.endsWith('.html') && lastSegment.length > 10) {
       return true;
     }
-    
+
     // 5. Item/artikel paths
     if (pathSegments.includes('item') || pathSegments.includes('artikel')) {
       return true;
     }
-    
+
     return false;
   } catch {
     return false;
   }
+}
+
+function extractUrlsFromMarkdown(markdown: string): string[] {
+  const urls: string[] = [];
+
+  // Match markdown links: [text](url)
+  const linkRe = /\((https?:\/\/[^)\s]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = linkRe.exec(markdown)) !== null) {
+    urls.push(m[1]);
+  }
+
+  // Match any bare URLs
+  const bareRe = /(https?:\/\/[^\s)\]}>"]+)/g;
+  while ((m = bareRe.exec(markdown)) !== null) {
+    urls.push(m[1]);
+  }
+
+  return Array.from(new Set(urls));
 }
 
 function shouldExcludeProduct(url: string, name: string, excludedCategories: string[]): boolean {
@@ -418,7 +440,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         url: competitorConfig.scrape_url,
-        formats: ['links'],
+        formats: ['links', 'markdown'],
         onlyMainContent: false,
         waitFor: 3000, // Wait for JS-rendered content
       }),
@@ -434,7 +456,12 @@ Deno.serve(async (req) => {
     }
 
     const scrapeData = await scrapeResponse.json();
-    const allUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
+
+    const linkUrls: string[] = scrapeData.data?.links || scrapeData.links || [];
+    const listingMarkdown: string = scrapeData.data?.markdown || scrapeData.markdown || '';
+    const markdownUrls = listingMarkdown ? extractUrlsFromMarkdown(listingMarkdown) : [];
+
+    const allUrls: string[] = Array.from(new Set([...linkUrls, ...markdownUrls]));
     console.log(`Found ${allUrls.length} total URLs on listing page`);
 
     // Step 2: Filter to product URLs only
@@ -442,6 +469,13 @@ Deno.serve(async (req) => {
       isProductUrl(url, competitorConfig.scrape_url, competitorConfig.product_url_patterns)
     );
     console.log(`Found ${productUrls.length} product URLs`);
+
+    if (productUrls.length === 0) {
+      const htmlLike = allUrls.filter((u) => u.toLowerCase().includes('.html')).length;
+      console.log(`[debug] 0 product URLs. URLs with ".html": ${htmlLike}`);
+      console.log('[debug] Sample listing URLs:', allUrls.slice(0, 25));
+      console.log('[debug] Patterns:', competitorConfig.product_url_patterns);
+    }
 
     // Step 3: Get existing product URLs to avoid duplicates
     const { data: existingProducts } = await supabase
