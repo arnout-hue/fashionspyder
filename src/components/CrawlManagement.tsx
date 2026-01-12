@@ -13,6 +13,16 @@ import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
 import { Globe, Loader2, Play, CheckCircle2, XCircle, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2 } from 'lucide-react';
 
+// URL validation helper
+function isValidHttpUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 interface Competitor {
   id: string;
   name: string;
@@ -99,11 +109,41 @@ export const CrawlManagement = () => {
   };
 
   const handleAddCompetitor = async () => {
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Competitor name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate scrape URL
+    if (!formData.scrape_url.trim() || !isValidHttpUrl(formData.scrape_url)) {
+      toast({
+        title: 'Invalid URL',
+        description: 'Scrape URL must be a valid HTTP/HTTPS URL',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate logo URL if provided
+    if (formData.logo_url.trim() && !isValidHttpUrl(formData.logo_url)) {
+      toast({
+        title: 'Invalid URL',
+        description: 'Logo URL must be a valid HTTP/HTTPS URL',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const { error } = await supabase.from('competitors').insert({
-      name: formData.name,
-      scrape_url: formData.scrape_url,
-      logo_url: formData.logo_url || null,
-      notes: formData.notes || null,
+      name: formData.name.trim().slice(0, 100),
+      scrape_url: formData.scrape_url.trim().slice(0, 500),
+      logo_url: formData.logo_url.trim().slice(0, 500) || null,
+      notes: formData.notes.trim().slice(0, 1000) || null,
       product_url_patterns: formData.product_url_patterns.split(',').map(p => p.trim()).filter(Boolean),
       excluded_categories: formData.excluded_categories.split(',').map(c => c.trim()).filter(Boolean),
     });
@@ -128,13 +168,43 @@ export const CrawlManagement = () => {
   const handleEditCompetitor = async () => {
     if (!editingCompetitor) return;
 
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Competitor name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate scrape URL
+    if (!formData.scrape_url.trim() || !isValidHttpUrl(formData.scrape_url)) {
+      toast({
+        title: 'Invalid URL',
+        description: 'Scrape URL must be a valid HTTP/HTTPS URL',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate logo URL if provided
+    if (formData.logo_url.trim() && !isValidHttpUrl(formData.logo_url)) {
+      toast({
+        title: 'Invalid URL',
+        description: 'Logo URL must be a valid HTTP/HTTPS URL',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('competitors')
       .update({
-        name: formData.name,
-        scrape_url: formData.scrape_url,
-        logo_url: formData.logo_url || null,
-        notes: formData.notes || null,
+        name: formData.name.trim().slice(0, 100),
+        scrape_url: formData.scrape_url.trim().slice(0, 500),
+        logo_url: formData.logo_url.trim().slice(0, 500) || null,
+        notes: formData.notes.trim().slice(0, 1000) || null,
         product_url_patterns: formData.product_url_patterns.split(',').map(p => p.trim()).filter(Boolean),
         excluded_categories: formData.excluded_categories.split(',').map(c => c.trim()).filter(Boolean),
       })
@@ -268,6 +338,7 @@ export const CrawlManagement = () => {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. Loavies"
+            maxLength={100}
           />
         </div>
         <div className="space-y-2">
@@ -277,6 +348,7 @@ export const CrawlManagement = () => {
             value={formData.logo_url}
             onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
             placeholder="https://example.com/logo.png"
+            maxLength={500}
           />
         </div>
       </div>
@@ -288,6 +360,7 @@ export const CrawlManagement = () => {
           value={formData.scrape_url}
           onChange={(e) => setFormData({ ...formData, scrape_url: e.target.value })}
           placeholder="https://example.com/collections/new"
+          maxLength={500}
         />
         <p className="text-xs text-muted-foreground">
           Use the "new arrivals" or "nieuw" section URL for best results
@@ -301,6 +374,7 @@ export const CrawlManagement = () => {
           value={formData.product_url_patterns}
           onChange={(e) => setFormData({ ...formData, product_url_patterns: e.target.value })}
           placeholder="/products/, /collections/"
+          maxLength={500}
         />
         <p className="text-xs text-muted-foreground">
           URL patterns to identify product pages (e.g., /products/, /collections/)
@@ -315,6 +389,7 @@ export const CrawlManagement = () => {
           onChange={(e) => setFormData({ ...formData, excluded_categories: e.target.value })}
           placeholder="accessories, bags, belts, earrings..."
           rows={3}
+          maxLength={2000}
         />
         <p className="text-xs text-muted-foreground">
           Products containing these words in their URL or name will be filtered out
@@ -329,6 +404,7 @@ export const CrawlManagement = () => {
           onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           placeholder="Any notes about this competitor..."
           rows={2}
+          maxLength={1000}
         />
       </div>
     </div>
