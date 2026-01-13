@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, X } from "lucide-react";
+import { useState } from "react";
+import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SwipeDeck } from "@/components/SwipeDeck";
 import { ProductGrid } from "@/components/ProductGrid";
+import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { Product } from "@/data/mockData";
 
 type ViewMode = "swipe" | "grid";
@@ -31,6 +32,7 @@ export const DiscoverView = ({
 }: DiscoverViewProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>("swipe");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -147,6 +149,15 @@ export const DiscoverView = ({
                   <ThumbsDown className="h-4 w-4" />
                   Add to Negative
                 </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5"
+                  onClick={() => setCollectionDialogOpen(true)}
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  Add to Collection
+                </Button>
               </div>
             </>
           )}
@@ -175,6 +186,13 @@ export const DiscoverView = ({
           onDeselectAll={handleDeselectAll}
         />
       )}
+
+      <AddToCollectionDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+        productIds={Array.from(selectedIds)}
+        onSuccess={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
   Send,
   Loader2,
   UserPlus,
+  FolderPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { Product, Supplier } from "@/data/mockData";
 import { Colleague } from "@/components/ColleagueManagement";
+import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { emailApi } from "@/lib/api/firecrawl";
 import { useToast } from "@/hooks/use-toast";
 
@@ -78,6 +80,9 @@ export const ProductList = ({
   const [emailSubject, setEmailSubject] = useState("");
   const [customMessage, setCustomMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  
+  // Collection dialog state
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -268,6 +273,19 @@ export const ProductList = ({
                 >
                   <UserPlus className="h-4 w-4" />
                   Send to Colleague
+                </Button>
+              )}
+
+              {/* Add to Collection (Positive list only) */}
+              {type === "positive" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="gap-1.5"
+                  onClick={() => setCollectionDialogOpen(true)}
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  Add to Collection
                 </Button>
               )}
 
@@ -562,6 +580,14 @@ export const ProductList = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add to Collection Dialog */}
+      <AddToCollectionDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+        productIds={Array.from(selectedIds)}
+        onSuccess={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 };
