@@ -475,10 +475,22 @@ export const CrawlManagement = () => {
   const handleApplyGlobalFilters = async () => {
     const categories = globalExcludedCategories.split(',').map(c => c.trim()).filter(Boolean);
     
+    // Update all competitors by their IDs
+    const competitorIds = competitors.map(c => c.id);
+    
+    if (competitorIds.length === 0) {
+      toast({
+        title: 'No competitors',
+        description: 'No competitors to update',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('competitors')
       .update({ excluded_categories: categories })
-      .neq('id', ''); // Update all
+      .in('id', competitorIds);
 
     if (error) {
       toast({
