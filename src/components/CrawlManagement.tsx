@@ -6,12 +6,14 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
-import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3 } from 'lucide-react';
+import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock } from 'lucide-react';
+import { ScheduleAutomation } from '@/components/ScheduleAutomation';
 
 // URL validation helper
 function isValidHttpUrl(url: string): boolean {
@@ -613,15 +615,27 @@ export const CrawlManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Crawl Competitors</h2>
-          <p className="text-muted-foreground">
-            Manage competitors and scrape their new arrivals
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-2">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Crawl Competitors</h2>
+        <p className="text-muted-foreground">
+          Manage competitors and automate crawling
+        </p>
+      </div>
+
+      <Tabs defaultValue="competitors" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="competitors" className="gap-2">
+            <Globe className="h-4 w-4" />
+            Competitors
+          </TabsTrigger>
+          <TabsTrigger value="automation" className="gap-2">
+            <Clock className="h-4 w-4" />
+            Automation
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="competitors" className="space-y-6">
+          <div className="flex items-center justify-end gap-2">
           <Button
             variant="outline"
             onClick={handleBulkCrawl}
@@ -666,30 +680,29 @@ export const CrawlManagement = () => {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingCompetitor} onOpenChange={(open) => !open && setEditingCompetitor(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Competitor</DialogTitle>
-            <DialogDescription>
-              Update competitor settings and URLs
-            </DialogDescription>
-          </DialogHeader>
-          <CompetitorFormContent />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingCompetitor(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditCompetitor} disabled={!formData.name || !formData.scrape_url}>
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        {/* Edit Dialog */}
+        <Dialog open={!!editingCompetitor} onOpenChange={(open) => !open && setEditingCompetitor(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Competitor</DialogTitle>
+              <DialogDescription>
+                Update competitor settings and URLs
+              </DialogDescription>
+            </DialogHeader>
+            <CompetitorFormContent />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingCompetitor(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditCompetitor} disabled={!formData.name || !formData.scrape_url}>
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {competitors.length === 0 ? (
+        {competitors.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Globe className="mx-auto h-12 w-12 text-muted-foreground/50" />
@@ -916,8 +929,14 @@ export const CrawlManagement = () => {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+        <TabsContent value="automation">
+          <ScheduleAutomation />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
