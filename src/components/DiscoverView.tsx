@@ -20,15 +20,15 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SwipeDeck } from "@/components/SwipeDeck";
 import { ProductGrid } from "@/components/ProductGrid";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
-import { Product } from "@/data/mockData";
+import { Product, ProductWithCollections } from "@/data/mockData";
 import { exportToCSV, exportToExcel } from "@/lib/exportUtils";
 
 type ViewMode = "swipe" | "grid";
 
 interface DiscoverViewProps {
-  products: Product[];
-  onSwipeRight: (product: Product) => void;
-  onSwipeLeft: (product: Product) => void;
+  products: ProductWithCollections[];
+  onSwipeRight: (product: ProductWithCollections) => void;
+  onSwipeLeft: (product: ProductWithCollections) => void;
   onBulkStatusChange: (productIds: string[], status: "positive" | "negative") => void;
 }
 

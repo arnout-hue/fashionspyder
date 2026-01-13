@@ -2,23 +2,23 @@ import { useState, useRef } from "react";
 import { X, Heart, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SwipeCard } from "./SwipeCard";
-import { Product } from "@/data/mockData";
+import { ProductWithCollections } from "@/data/mockData";
 
 interface SwipeDeckProps {
-  products: Product[];
-  onSwipeRight: (product: Product) => void;
-  onSwipeLeft: (product: Product) => void;
+  products: ProductWithCollections[];
+  onSwipeRight: (product: ProductWithCollections) => void;
+  onSwipeLeft: (product: ProductWithCollections) => void;
 }
 
 export const SwipeDeck = ({ products, onSwipeRight, onSwipeLeft }: SwipeDeckProps) => {
   const [swipingId, setSwipingId] = useState<string | null>(null);
-  const [lastSwiped, setLastSwiped] = useState<{ product: Product; direction: "left" | "right" } | null>(null);
+  const [lastSwiped, setLastSwiped] = useState<{ product: ProductWithCollections; direction: "left" | "right" } | null>(null);
 
   // Show up to 3 cards from the products array
   // The products array is already filtered to only pending products and updates when status changes
   const visibleProducts = products.slice(0, 3);
 
-  const handleSwipe = (direction: "left" | "right", product?: Product) => {
+  const handleSwipe = (direction: "left" | "right", product?: ProductWithCollections) => {
     const targetProduct = product || products[0];
     if (!targetProduct || swipingId) return;
 
