@@ -261,14 +261,14 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
     setEditingCollection(collection);
   };
 
-  const CollectionForm = () => (
+  const collectionForm = (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="name">Name *</Label>
         <Input
           id="name"
           value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
           placeholder="e.g., Spring 2024 Picks"
         />
       </div>
@@ -278,7 +278,7 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
         <Textarea
           id="description"
           value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
           placeholder="Optional description..."
           rows={3}
         />
@@ -291,7 +291,7 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
             <button
               key={color.value}
               type="button"
-              onClick={() => setFormData({ ...formData, color: color.value })}
+              onClick={() => setFormData((prev) => ({ ...prev, color: color.value }))}
               className={`h-8 w-8 rounded-full border-2 transition-all ${
                 formData.color === color.value
                   ? 'border-foreground scale-110'
@@ -314,7 +314,7 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
         <Switch
           id="shared"
           checked={formData.is_shared}
-          onCheckedChange={(checked) => setFormData({ ...formData, is_shared: checked })}
+          onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, is_shared: checked }))}
         />
       </div>
     </div>
@@ -344,7 +344,7 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
                 Create a new collection to organize your products
               </DialogDescription>
             </DialogHeader>
-            <CollectionForm />
+            {collectionForm}
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
@@ -473,7 +473,7 @@ export const CollectionManagement = ({ onViewCollection }: CollectionManagementP
             <DialogTitle>Edit Collection</DialogTitle>
             <DialogDescription>Update collection details</DialogDescription>
           </DialogHeader>
-          <CollectionForm />
+          {collectionForm}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingCollection(null)}>
               Cancel
