@@ -1,12 +1,16 @@
-import { useState } from "react";
 import { format } from "date-fns";
-import { ExternalLink, Tag, Calendar, Check } from "lucide-react";
+import { ExternalLink, Tag, Calendar, Check, Folder } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Product } from "@/data/mockData";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ProductWithCollections } from "@/data/mockData";
 
 interface ProductGridProps {
-  products: Product[];
+  products: ProductWithCollections[];
   selectedIds: Set<string>;
   onToggleSelect: (productId: string) => void;
   onSelectAll: () => void;
@@ -108,6 +112,41 @@ export const ProductGrid = ({
                   </div>
                 )}
               </div>
+              {/* Collection Badges */}
+              {product.collections && product.collections.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <TooltipProvider>
+                    {product.collections.slice(0, 2).map((collection) => (
+                      <Tooltip key={collection.id}>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                            style={{ backgroundColor: collection.color }}
+                          >
+                            <Folder className="h-2.5 w-2.5" />
+                            <span className="max-w-[50px] truncate">{collection.name}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{collection.name}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                    {product.collections.length > 2 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            +{product.collections.length - 2}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{product.collections.slice(2).map(c => c.name).join(', ')}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </TooltipProvider>
+                </div>
+              )}
             </div>
           </div>
         );

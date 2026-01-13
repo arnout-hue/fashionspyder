@@ -3,10 +3,10 @@ import { format } from "date-fns";
 import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { ExternalLink, Tag, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Product } from "@/data/mockData";
+import { ProductWithCollections } from "@/data/mockData";
 
 interface SwipeCardProps {
-  product: Product;
+  product: ProductWithCollections;
   onSwipe: (direction: "left" | "right") => void;
   isTop: boolean;
   stackIndex: number;

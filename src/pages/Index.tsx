@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import {
   Product,
   Supplier,
+  ProductWithCollections,
+  ProductCollection,
 } from "@/data/mockData";
 
 type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections";
@@ -21,28 +23,53 @@ type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplie
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithCollections[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [competitors, setCompetitors] = useState<string[]>(["All"]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch products from database
+  // Fetch products from database with their collections
   const fetchProducts = useCallback(async () => {
-    const { data, error } = await supabase
+    // Fetch products
+    const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
     
-    if (error) {
-      console.error('Error fetching products:', error);
+    if (productsError) {
+      console.error('Error fetching products:', productsError);
       toast.error('Failed to load products');
+      setIsLoading(false);
       return;
     }
     
-    if (data) {
-      // Map database fields to Product interface
-      const mappedProducts: Product[] = data.map(p => ({
+    // Fetch product collections with collection details
+    const { data: productCollectionsData } = await supabase
+      .from('product_collections')
+      .select('product_id, collection_id, collections(id, name, color)');
+    
+    // Build a map of product_id -> collections
+    const collectionsMap = new Map<string, ProductCollection[]>();
+    if (productCollectionsData) {
+      for (const pc of productCollectionsData) {
+        if (pc.product_id && pc.collections) {
+          const collection = pc.collections as unknown as { id: string; name: string; color: string };
+          if (!collectionsMap.has(pc.product_id)) {
+            collectionsMap.set(pc.product_id, []);
+          }
+          collectionsMap.get(pc.product_id)!.push({
+            id: collection.id,
+            name: collection.name,
+            color: collection.color || '#6366f1',
+          });
+        }
+      }
+    }
+    
+    if (productsData) {
+      // Map database fields to ProductWithCollections interface
+      const mappedProducts: ProductWithCollections[] = productsData.map(p => ({
         id: p.id,
         name: p.name,
         competitor: p.competitor,
@@ -56,6 +83,7 @@ const Index = () => {
         is_sent: p.is_sent,
         created_at: p.created_at,
         updated_at: p.updated_at,
+        collections: collectionsMap.get(p.id) || [],
       }));
       setProducts(mappedProducts);
     }
@@ -127,7 +155,7 @@ const Index = () => {
   const negativeProducts = filteredProducts.filter((p) => p.status === "negative");
 
   // Handlers - update database and local state
-  const handleSwipeRight = async (product: Product) => {
+  const handleSwipeRight = async (product: ProductWithCollections) => {
     const { error } = await supabase
       .from('products')
       .update({ status: 'positive' })
@@ -145,7 +173,7 @@ const Index = () => {
     );
   };
 
-  const handleSwipeLeft = async (product: Product) => {
+  const handleSwipeLeft = async (product: ProductWithCollections) => {
     const { error } = await supabase
       .from('products')
       .update({ status: 'negative' })
@@ -220,7 +248,7 @@ const Index = () => {
     );
   };
 
-  const handleMoveProduct = async (product: Product) => {
+  const handleMoveProduct = async (product: ProductWithCollections) => {
     const newStatus = product.status === "positive" ? "negative" : "positive";
     const { error } = await supabase
       .from('products')

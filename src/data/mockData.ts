@@ -3,6 +3,17 @@ import { Tables } from "@/integrations/supabase/types";
 export type Product = Tables<"products">;
 export type Supplier = Tables<"suppliers">;
 
+// Extended product type with collection info
+export interface ProductCollection {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ProductWithCollections extends Product {
+  collections?: ProductCollection[];
+}
+
 export const mockSuppliers: Supplier[] = [
   {
     id: "sup-1",

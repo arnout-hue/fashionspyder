@@ -17,6 +17,7 @@ import {
   UserPlus,
   FolderPlus,
   Download,
+  Folder,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,20 +51,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Product, Supplier } from "@/data/mockData";
+import { Product, Supplier, ProductWithCollections } from "@/data/mockData";
 import { Colleague } from "@/components/ColleagueManagement";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { emailApi } from "@/lib/api/firecrawl";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToExcel, enrichProductsForExport } from "@/lib/exportUtils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ProductListProps {
-  products: Product[];
+  products: ProductWithCollections[];
   suppliers: Supplier[];
   colleagues?: Colleague[];
   type: "positive" | "negative";
   onUpdateProduct: (productId: string, updates: Partial<Product>) => void;
-  onMoveProduct: (product: Product) => void;
+  onMoveProduct: (product: ProductWithCollections) => void;
   onBulkStatusChange: (productIds: string[], status: "positive" | "negative" | "pending") => void;
   onBulkAssignSupplier: (productIds: string[], supplierId: string) => void;
 }
@@ -451,6 +458,41 @@ export const ProductList = ({
                       </div>
                     )}
                   </div>
+                  {/* Collection Badges */}
+                  {product.collections && product.collections.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <TooltipProvider>
+                        {product.collections.slice(0, 3).map((collection) => (
+                          <Tooltip key={collection.id}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                                style={{ backgroundColor: collection.color }}
+                              >
+                                <Folder className="h-2.5 w-2.5" />
+                                <span className="max-w-[60px] truncate">{collection.name}</span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{collection.name}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
+                        {product.collections.length > 3 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                +{product.collections.length - 3}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{product.collections.slice(3).map(c => c.name).join(', ')}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </TooltipProvider>
+                    </div>
+                  )}
                 </div>
 
                 {type === "positive" && (
