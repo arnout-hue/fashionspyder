@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, FolderPlus } from "lucide-react";
+import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, FolderPlus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,11 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { SwipeDeck } from "@/components/SwipeDeck";
 import { ProductGrid } from "@/components/ProductGrid";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { Product } from "@/data/mockData";
+import { exportToCSV, exportToExcel } from "@/lib/exportUtils";
 
 type ViewMode = "swipe" | "grid";
 
@@ -60,6 +68,18 @@ export const DiscoverView = ({
   };
 
   const selectedCount = selectedIds.size;
+
+  const handleExport = (format: 'csv' | 'excel', scope: 'selected' | 'all') => {
+    const productsToExport = scope === 'selected' 
+      ? products.filter(p => selectedIds.has(p.id))
+      : products;
+    const filename = `pending-products-${new Date().toISOString().split('T')[0]}`;
+    if (format === 'csv') {
+      exportToCSV(productsToExport, filename);
+    } else {
+      exportToExcel(productsToExport, filename);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -158,6 +178,29 @@ export const DiscoverView = ({
                   <FolderPlus className="h-4 w-4" />
                   Add to Collection
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="secondary" className="gap-1.5">
+                      <Download className="h-4 w-4" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-popover">
+                    <DropdownMenuItem onClick={() => handleExport('csv', 'selected')}>
+                      Export Selected (CSV)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport('excel', 'selected')}>
+                      Export Selected (Excel)
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleExport('csv', 'all')}>
+                      Export All (CSV)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport('excel', 'all')}>
+                      Export All (Excel)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </>
           )}

@@ -16,6 +16,7 @@ import {
   Loader2,
   UserPlus,
   FolderPlus,
+  Download,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,11 +43,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Product, Supplier } from "@/data/mockData";
 import { Colleague } from "@/components/ColleagueManagement";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { emailApi } from "@/lib/api/firecrawl";
 import { useToast } from "@/hooks/use-toast";
+import { exportToCSV, exportToExcel, enrichProductsForExport } from "@/lib/exportUtils";
 
 interface ProductListProps {
   products: Product[];
@@ -123,6 +132,19 @@ export const ProductList = ({
     setCustomMessage("");
     setSelectedColleagueId("");
     setColleagueDialogOpen(true);
+  };
+
+  const handleExport = (exportFormat: 'csv' | 'excel', scope: 'selected' | 'all') => {
+    const productsToExport = scope === 'selected' 
+      ? products.filter(p => selectedIds.has(p.id))
+      : products;
+    const enrichedProducts = enrichProductsForExport(productsToExport, suppliers);
+    const filename = `${type}-products-${new Date().toISOString().split('T')[0]}`;
+    if (exportFormat === 'csv') {
+      exportToCSV(enrichedProducts, filename);
+    } else {
+      exportToExcel(enrichedProducts, filename);
+    }
   };
 
   const handleSendToColleague = async () => {
@@ -288,6 +310,31 @@ export const ProductList = ({
                   Add to Collection
                 </Button>
               )}
+
+              {/* Export Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="secondary" className="gap-1.5">
+                    <Download className="h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover">
+                  <DropdownMenuItem onClick={() => handleExport('csv', 'selected')}>
+                    Export Selected (CSV)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('excel', 'selected')}>
+                    Export Selected (Excel)
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport('csv', 'all')}>
+                    Export All (CSV)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('excel', 'all')}>
+                    Export All (Excel)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Move to opposite list */}
               {type === "positive" ? (
