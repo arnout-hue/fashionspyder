@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          action_category: string
+          created_at: string | null
+          details: Json | null
+          entity_id: string | null
+          entity_name: string | null
+          entity_type: string | null
+          id: string
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          action_category: string
+          created_at?: string | null
+          details?: Json | null
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          id?: string
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          action_category?: string
+          created_at?: string | null
+          details?: Json | null
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          id?: string
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       colleagues: {
         Row: {
           created_at: string
@@ -47,6 +86,42 @@ export type Database = {
           phone?: string | null
           role?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      collections: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_shared: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_shared?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_shared?: boolean | null
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -138,6 +213,84 @@ export type Database = {
             columns: ["competitor_id"]
             isOneToOne: false
             referencedRelation: "competitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crawl_schedule: {
+        Row: {
+          created_at: string | null
+          cron_expression: string
+          delay_between_competitors_seconds: number | null
+          id: string
+          is_enabled: boolean | null
+          last_run_at: string | null
+          max_products_per_competitor: number | null
+          name: string
+          next_run_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          cron_expression?: string
+          delay_between_competitors_seconds?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          last_run_at?: string | null
+          max_products_per_competitor?: number | null
+          name?: string
+          next_run_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          cron_expression?: string
+          delay_between_competitors_seconds?: number | null
+          id?: string
+          is_enabled?: boolean | null
+          last_run_at?: string | null
+          max_products_per_competitor?: number | null
+          name?: string
+          next_run_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      product_collections: {
+        Row: {
+          added_at: string | null
+          added_by: string | null
+          collection_id: string | null
+          id: string
+          product_id: string | null
+        }
+        Insert: {
+          added_at?: string | null
+          added_by?: string | null
+          collection_id?: string | null
+          id?: string
+          product_id?: string | null
+        }
+        Update: {
+          added_at?: string | null
+          added_by?: string | null
+          collection_id?: string | null
+          id?: string
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_collections_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_collections_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

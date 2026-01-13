@@ -7,6 +7,8 @@ import { SupplierOverview } from "@/components/SupplierOverview";
 import { CrawlManagement } from "@/components/CrawlManagement";
 import { ColleagueManagement, Colleague } from "@/components/ColleagueManagement";
 import { UserManagement } from "@/components/UserManagement";
+import { ActivityLog } from "@/components/ActivityLog";
+import { CollectionManagement } from "@/components/CollectionManagement";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -14,7 +16,7 @@ import {
   Supplier,
 } from "@/data/mockData";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
@@ -467,6 +469,14 @@ const Index = () => {
 
         {currentView === "user-management" && (
           <UserManagement />
+        )}
+
+        {currentView === "activity-log" && (
+          <ActivityLog />
+        )}
+
+        {currentView === "collections" && (
+          <CollectionManagement />
         )}
       </main>
     </div>

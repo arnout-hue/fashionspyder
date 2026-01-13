@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections";
 
 interface NavigationProps {
   currentView: View;
@@ -86,6 +86,16 @@ export const Navigation = ({
       icon: <UserPlus className="h-4 w-4" />,
     },
     {
+      id: "collections",
+      label: "Collections",
+      icon: <FolderOpen className="h-4 w-4" />,
+    },
+    {
+      id: "activity-log",
+      label: "Activity Log",
+      icon: <Activity className="h-4 w-4" />,
+    },
+    {
       id: "user-management",
       label: "Manage Users",
       icon: <ShieldCheck className="h-4 w-4" />,
@@ -94,7 +104,7 @@ export const Navigation = ({
   ];
 
   const filteredSettingsItems = settingsItems.filter(item => !item.adminOnly || isAdmin);
-  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management";
+  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management" || currentView === "activity-log" || currentView === "collections";
 
   return (
     <>
