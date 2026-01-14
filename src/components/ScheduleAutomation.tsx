@@ -218,7 +218,7 @@ export const ScheduleAutomation = () => {
 
       for (const competitor of competitors) {
         try {
-          const response = await firecrawlApi.scrapeCompetitor(competitor.id, maxProducts);
+          const response = await firecrawlApi.agentScrapeCompetitor(competitor.id, maxProducts);
           if (response.success) {
             successCount++;
           } else {
