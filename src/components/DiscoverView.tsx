@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, FolderPlus, Download } from "lucide-react";
+import { LayoutGrid, Layers, ThumbsUp, ThumbsDown, FolderPlus, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,6 +22,16 @@ import { ProductGrid } from "@/components/ProductGrid";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { Product, ProductWithCollections } from "@/data/mockData";
 import { exportToCSV, exportToExcel } from "@/lib/exportUtils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type ViewMode = "swipe" | "grid";
 
@@ -30,6 +40,7 @@ interface DiscoverViewProps {
   onSwipeRight: (product: ProductWithCollections) => void;
   onSwipeLeft: (product: ProductWithCollections) => void;
   onBulkStatusChange: (productIds: string[], status: "positive" | "negative") => void;
+  onClearToTrash: (productIds: string[]) => void;
 }
 
 export const DiscoverView = ({
@@ -37,10 +48,12 @@ export const DiscoverView = ({
   onSwipeRight,
   onSwipeLeft,
   onBulkStatusChange,
+  onClearToTrash,
 }: DiscoverViewProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>("swipe");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -81,6 +94,11 @@ export const DiscoverView = ({
     }
   };
 
+  const handleClearAll = () => {
+    onClearToTrash(products.map(p => p.id));
+    setClearDialogOpen(false);
+  };
+
   return (
     <div className="mx-auto max-w-6xl">
       {/* Header with View Toggle */}
@@ -95,6 +113,17 @@ export const DiscoverView = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {products.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => setClearDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Clear All</span>
+            </Button>
+          )}
           <ToggleGroup
             type="single"
             value={viewMode}
@@ -236,6 +265,28 @@ export const DiscoverView = ({
         productIds={Array.from(selectedIds)}
         onSuccess={() => setSelectedIds(new Set())}
       />
+
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all pending items?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move {products.length} item{products.length !== 1 ? "s" : ""} to the trash. 
+              You can restore them later from Settings → Trash.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

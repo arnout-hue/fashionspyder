@@ -9,6 +9,7 @@ import { ColleagueManagement, Colleague } from "@/components/ColleagueManagement
 import { UserManagement } from "@/components/UserManagement";
 import { ActivityLog } from "@/components/ActivityLog";
 import { CollectionManagement } from "@/components/CollectionManagement";
+import { TrashView } from "@/components/TrashView";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -18,7 +19,7 @@ import {
   ProductCollection,
 } from "@/data/mockData";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections" | "trash";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
@@ -153,6 +154,7 @@ const Index = () => {
   const pendingProducts = filteredProducts.filter((p) => p.status === "pending");
   const positiveProducts = filteredProducts.filter((p) => p.status === "positive");
   const negativeProducts = filteredProducts.filter((p) => p.status === "negative");
+  const trashedProducts = filteredProducts.filter((p) => p.status === "trash");
 
   // Handlers - update database and local state
   const handleSwipeRight = async (product: ProductWithCollections) => {
@@ -191,12 +193,12 @@ const Index = () => {
     );
   };
 
-  const handleBulkStatusChange = async (productIds: string[], status: "positive" | "negative" | "pending") => {
+  const handleBulkStatusChange = async (productIds: string[], status: "positive" | "negative" | "pending" | "trash") => {
     const { error } = await supabase
       .from('products')
       .update({ 
         status, 
-        supplier_id: status === "pending" ? null : undefined 
+        supplier_id: (status === "pending" || status === "trash") ? null : undefined 
       })
       .in('id', productIds);
     
@@ -207,10 +209,40 @@ const Index = () => {
     
     setProducts((prev) =>
       prev.map((p) =>
-        productIds.includes(p.id) ? { ...p, status, supplier_id: status === "pending" ? undefined : p.supplier_id } : p
+        productIds.includes(p.id) ? { ...p, status, supplier_id: (status === "pending" || status === "trash") ? undefined : p.supplier_id } : p
       )
     );
-    toast.success(`${productIds.length} products moved to ${status}`);
+    const statusLabel = status === "trash" ? "trash" : status;
+    toast.success(`${productIds.length} products moved to ${statusLabel}`);
+  };
+
+  const handleClearToTrash = async (productIds: string[]) => {
+    await handleBulkStatusChange(productIds, "trash");
+  };
+
+  const handleRestoreFromTrash = async (productIds: string[], status: "pending" | "positive" | "negative") => {
+    await handleBulkStatusChange(productIds, status);
+  };
+
+  const handlePermanentDelete = async (productIds: string[]) => {
+    // First delete from product_collections
+    await supabase
+      .from('product_collections')
+      .delete()
+      .in('product_id', productIds);
+    
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .in('id', productIds);
+    
+    if (error) {
+      toast.error('Failed to delete products');
+      return;
+    }
+    
+    setProducts((prev) => prev.filter((p) => !productIds.includes(p.id)));
+    toast.success(`${productIds.length} products permanently deleted`);
   };
 
   const handleBulkAssignSupplier = async (productIds: string[], supplierId: string) => {
@@ -409,6 +441,7 @@ const Index = () => {
         positiveCount={positiveProducts.length}
         negativeCount={negativeProducts.length}
         pendingCount={pendingProducts.length}
+        trashCount={trashedProducts.length}
         selectedCompetitor={selectedCompetitor}
         onCompetitorChange={setSelectedCompetitor}
         competitors={competitors}
@@ -421,6 +454,7 @@ const Index = () => {
             onSwipeRight={handleSwipeRight}
             onSwipeLeft={handleSwipeLeft}
             onBulkStatusChange={handleBulkStatusChange}
+            onClearToTrash={handleClearToTrash}
           />
         )}
 
@@ -441,6 +475,7 @@ const Index = () => {
               onMoveProduct={handleMoveProduct}
               onBulkStatusChange={handleBulkStatusChange}
               onBulkAssignSupplier={handleBulkAssignSupplier}
+              onClearToTrash={handleClearToTrash}
             />
           </div>
         )}
@@ -461,6 +496,7 @@ const Index = () => {
               onMoveProduct={handleMoveProduct}
               onBulkStatusChange={handleBulkStatusChange}
               onBulkAssignSupplier={handleBulkAssignSupplier}
+              onClearToTrash={handleClearToTrash}
             />
           </div>
         )}
@@ -505,6 +541,22 @@ const Index = () => {
 
         {currentView === "collections" && (
           <CollectionManagement />
+        )}
+
+        {currentView === "trash" && (
+          <div>
+            <div className="mb-8">
+              <h1 className="font-display text-3xl font-semibold">Trash</h1>
+              <p className="mt-2 text-muted-foreground">
+                Cleared items — restore or permanently delete
+              </p>
+            </div>
+            <TrashView
+              products={trashedProducts}
+              onRestoreProducts={handleRestoreFromTrash}
+              onPermanentDelete={handlePermanentDelete}
+            />
+          </div>
         )}
       </main>
     </div>

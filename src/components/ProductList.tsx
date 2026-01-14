@@ -18,6 +18,7 @@ import {
   FolderPlus,
   Download,
   Folder,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ProductListProps {
   products: ProductWithCollections[];
@@ -73,6 +84,7 @@ interface ProductListProps {
   onMoveProduct: (product: ProductWithCollections) => void;
   onBulkStatusChange: (productIds: string[], status: "positive" | "negative" | "pending") => void;
   onBulkAssignSupplier: (productIds: string[], supplierId: string) => void;
+  onClearToTrash: (productIds: string[]) => void;
 }
 
 export const ProductList = ({
@@ -84,6 +96,7 @@ export const ProductList = ({
   onMoveProduct,
   onBulkStatusChange,
   onBulkAssignSupplier,
+  onClearToTrash,
 }: ProductListProps) => {
   const { toast } = useToast();
   const [expandedNotes, setExpandedNotes] = useState<string | null>(null);
@@ -99,6 +112,9 @@ export const ProductList = ({
   
   // Collection dialog state
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
+  
+  // Clear dialog state
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -212,6 +228,11 @@ export const ProductList = ({
   };
 
   const selectedCount = selectedIds.size;
+
+  const handleClearAll = () => {
+    onClearToTrash(products.map(p => p.id));
+    setClearDialogOpen(false);
+  };
 
   if (products.length === 0) {
     return (
@@ -380,8 +401,19 @@ export const ProductList = ({
           </>
         )}
 
-        <div className="ml-auto text-sm text-muted-foreground">
-          {products.length} product{products.length !== 1 ? "s" : ""}
+        <div className="ml-auto flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+            onClick={() => setClearDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear All
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {products.length} product{products.length !== 1 ? "s" : ""}
+          </span>
         </div>
       </div>
 
@@ -677,6 +709,28 @@ export const ProductList = ({
         productIds={Array.from(selectedIds)}
         onSuccess={() => setSelectedIds(new Set())}
       />
+
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all {type} items?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move {products.length} item{products.length !== 1 ? "s" : ""} to the trash. 
+              You can restore them later from Settings → Trash.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
