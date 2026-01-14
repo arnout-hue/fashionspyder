@@ -113,36 +113,72 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
 
     console.log('[Agent] Starting Firecrawl deep scrape job...');
 
-    // Use Firecrawl's deep scrape endpoint (async job pattern)
-    const deepScrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: competitor.scrape_url,
-        formats: ['extract', 'links'],
-        extract: {
-          prompt: agentPrompt,
-          schema: productSchema,
-        },
-        onlyMainContent: false, // We need to scan the whole page for product links
-        waitFor: 5000, // Wait for JS rendering
-      }),
-    });
+    // Retry logic with exponential backoff for timeouts
+    const maxRetries = 3;
+    let scrapeData: any = null;
+    let lastError: string | null = null;
 
-    if (!deepScrapeResponse.ok) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[Agent] Firecrawl attempt ${attempt}/${maxRetries}...`);
+      
+      // Increase wait time on retries to give JS more time to render
+      const waitTime = 5000 + (attempt - 1) * 3000; // 5s, 8s, 11s
+      
+      const deepScrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: competitor.scrape_url,
+          formats: ['extract', 'links'],
+          extract: {
+            prompt: agentPrompt,
+            schema: productSchema,
+          },
+          onlyMainContent: false,
+          waitFor: waitTime,
+          timeout: 60000 + (attempt - 1) * 30000, // 60s, 90s, 120s timeout
+        }),
+      });
+
+      if (deepScrapeResponse.ok) {
+        scrapeData = await deepScrapeResponse.json();
+        console.log('[Agent] Firecrawl response received');
+        break; // Success, exit retry loop
+      }
+
       const errorText = await deepScrapeResponse.text();
-      console.error('[Agent] Firecrawl API error:', deepScrapeResponse.status, errorText.slice(0, 500));
+      lastError = `${deepScrapeResponse.status}: ${errorText.slice(0, 200)}`;
+      console.warn(`[Agent] Attempt ${attempt} failed: ${lastError}`);
+
+      // Only retry on timeout (408) or server errors (5xx)
+      if (deepScrapeResponse.status !== 408 && deepScrapeResponse.status < 500) {
+        console.error('[Agent] Non-retryable error, stopping');
+        break;
+      }
+
+      // Wait before retry with exponential backoff
+      if (attempt < maxRetries) {
+        const backoffMs = Math.pow(2, attempt) * 1000; // 2s, 4s
+        console.log(`[Agent] Waiting ${backoffMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+
+    if (!scrapeData) {
+      console.error('[Agent] All retries failed:', lastError);
       return new Response(
-        JSON.stringify({ success: false, error: `Firecrawl error: ${deepScrapeResponse.status}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          success: false, 
+          error: `Firecrawl timed out after ${maxRetries} attempts. The site may be slow to load.`,
+          details: lastError 
+        }),
+        { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const scrapeData = await deepScrapeResponse.json();
-    console.log('[Agent] Firecrawl response received');
     console.log('[Agent] Response keys:', Object.keys(scrapeData));
 
     // Extract products from the response
