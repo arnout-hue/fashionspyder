@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections";
+type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections" | "trash";
 
 interface NavigationProps {
   currentView: View;
@@ -26,6 +26,7 @@ interface NavigationProps {
   positiveCount: number;
   negativeCount: number;
   pendingCount: number;
+  trashCount: number;
   selectedCompetitor: string;
   onCompetitorChange: (competitor: string) => void;
   competitors: string[];
@@ -37,6 +38,7 @@ export const Navigation = ({
   positiveCount,
   negativeCount,
   pendingCount,
+  trashCount,
   selectedCompetitor,
   onCompetitorChange,
   competitors,
@@ -69,7 +71,7 @@ export const Navigation = ({
     },
   ];
 
-  const settingsItems: { id: View; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
+  const settingsItems: { id: View; label: string; icon: React.ReactNode; adminOnly?: boolean; count?: number }[] = [
     {
       id: "crawl",
       label: "Crawl Competitors",
@@ -91,6 +93,12 @@ export const Navigation = ({
       icon: <FolderOpen className="h-4 w-4" />,
     },
     {
+      id: "trash",
+      label: "Trash",
+      icon: <Trash2 className="h-4 w-4" />,
+      count: trashCount,
+    },
+    {
       id: "activity-log",
       label: "Activity Log",
       icon: <Activity className="h-4 w-4" />,
@@ -104,7 +112,7 @@ export const Navigation = ({
   ];
 
   const filteredSettingsItems = settingsItems.filter(item => !item.adminOnly || isAdmin);
-  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management" || currentView === "activity-log" || currentView === "collections";
+  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management" || currentView === "activity-log" || currentView === "collections" || currentView === "trash";
 
   return (
     <>
@@ -153,7 +161,7 @@ export const Navigation = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {filteredSettingsItems.map((item, index) => (
+              {filteredSettingsItems.map((item, index) => (
                   <div key={item.id}>
                     {item.adminOnly && index > 0 && <DropdownMenuSeparator />}
                     <DropdownMenuItem
@@ -162,6 +170,11 @@ export const Navigation = ({
                     >
                       {item.icon}
                       {item.label}
+                      {item.count !== undefined && item.count > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                          {item.count}
+                        </Badge>
+                      )}
                       {item.adminOnly && (
                         <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
                       )}
@@ -277,6 +290,11 @@ export const Navigation = ({
                   >
                     {item.icon}
                     {item.label}
+                    {item.count !== undefined && item.count > 0 && (
+                      <Badge variant="secondary" className="ml-auto text-xs">
+                        {item.count}
+                      </Badge>
+                    )}
                     {item.adminOnly && (
                       <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
                     )}
