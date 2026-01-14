@@ -57,10 +57,34 @@ export const firecrawlApi = {
     return data;
   },
 
-  // Scrape all products from a competitor (by ID or name)
+  // Scrape all products from a competitor (by ID or name) - Legacy method
   async scrapeCompetitor(competitorId: string, limit?: number): Promise<FirecrawlResponse> {
     const { data, error } = await supabase.functions.invoke('scrape-competitor-products', {
       body: { competitor: competitorId, limit },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
+  // Agent-based scraping with auto-detection (recommended)
+  async agentScrapeCompetitor(competitorId: string, limit?: number): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase.functions.invoke('agent-scrape-competitor', {
+      body: { competitor: competitorId, limit },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
+  // Check status of a crawl job
+  async checkCrawlJob(jobId?: string, competitorId?: string): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase.functions.invoke('check-agent-job', {
+      body: { jobId, competitorId },
     });
 
     if (error) {

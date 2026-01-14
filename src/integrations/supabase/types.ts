@@ -217,6 +217,53 @@ export type Database = {
           },
         ]
       }
+      crawl_jobs: {
+        Row: {
+          competitor_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          firecrawl_job_id: string
+          id: string
+          products_found: number | null
+          products_inserted: number | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          competitor_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          firecrawl_job_id: string
+          id?: string
+          products_found?: number | null
+          products_inserted?: number | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          competitor_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          firecrawl_job_id?: string
+          id?: string
+          products_found?: number | null
+          products_inserted?: number | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crawl_jobs_competitor_id_fkey"
+            columns: ["competitor_id"]
+            isOneToOne: false
+            referencedRelation: "competitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crawl_schedule: {
         Row: {
           created_at: string | null
