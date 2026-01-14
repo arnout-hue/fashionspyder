@@ -12,8 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
-import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock } from 'lucide-react';
+import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock, Bot, Wrench } from 'lucide-react';
 import { ScheduleAutomation } from '@/components/ScheduleAutomation';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // URL validation helper
 function isValidHttpUrl(url: string): boolean {
@@ -43,6 +44,7 @@ interface CrawlStatus {
   competitor: string;
   status: 'idle' | 'crawling' | 'success' | 'error';
   message?: string;
+  method?: 'agent' | 'classic';
   results?: {
     totalUrlsFound: number;
     productUrlsFound: number;
@@ -50,6 +52,7 @@ interface CrawlStatus {
     scrapedCount: number;
     skippedCount: number;
     errorsCount: number;
+    method?: string;
   };
 }
 
@@ -335,14 +338,21 @@ export const CrawlManagement = () => {
     await supabase.from('crawl_history').insert(record);
   };
 
-  const handleCrawl = async (competitor: Competitor) => {
+  const handleCrawl = async (competitor: Competitor, useAgent: boolean = true) => {
     setCrawlStatuses((prev) => ({
       ...prev,
-      [competitor.name]: { competitor: competitor.name, status: 'crawling' },
+      [competitor.name]: { 
+        competitor: competitor.name, 
+        status: 'crawling',
+        method: useAgent ? 'agent' : 'classic',
+      },
     }));
 
     try {
-      const response = await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+      // Use agent-based scraping by default, fall back to classic if needed
+      const response = useAgent 
+        ? await firecrawlApi.agentScrapeCompetitor(competitor.id, 50)
+        : await firecrawlApi.scrapeCompetitor(competitor.id, 25);
 
       if (response.success && response.data) {
         setCrawlStatuses((prev) => ({
@@ -350,6 +360,7 @@ export const CrawlManagement = () => {
           [competitor.name]: {
             competitor: competitor.name,
             status: 'success',
+            method: useAgent ? 'agent' : 'classic',
             message: `Found ${response.data.scrapedCount} new products`,
             results: response.data,
           },
@@ -366,7 +377,7 @@ export const CrawlManagement = () => {
 
         toast({
           title: 'Crawl Complete',
-          description: `Successfully scraped ${response.data.scrapedCount} new products from ${competitor.name}`,
+          description: `Found ${response.data.scrapedCount} new products from ${competitor.name}${response.data.method ? ` (${response.data.method})` : ''}`,
         });
         
         fetchCompetitors();
@@ -384,6 +395,7 @@ export const CrawlManagement = () => {
         [competitor.name]: {
           competitor: competitor.name,
           status: 'error',
+          method: useAgent ? 'agent' : 'classic',
           message: errorMessage,
         },
       }));
@@ -396,7 +408,7 @@ export const CrawlManagement = () => {
     }
   };
 
-  const handleBulkCrawl = async () => {
+  const handleBulkCrawl = async (useAgent: boolean = true) => {
     const activeCompetitors = competitors.filter(c => c.is_active);
     if (activeCompetitors.length === 0) {
       toast({
@@ -419,11 +431,17 @@ export const CrawlManagement = () => {
       
       setCrawlStatuses((prev) => ({
         ...prev,
-        [competitor.name]: { competitor: competitor.name, status: 'crawling' },
+        [competitor.name]: { 
+          competitor: competitor.name, 
+          status: 'crawling',
+          method: useAgent ? 'agent' : 'classic',
+        },
       }));
 
       try {
-        const response = await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+        const response = useAgent
+          ? await firecrawlApi.agentScrapeCompetitor(competitor.id, 50)
+          : await firecrawlApi.scrapeCompetitor(competitor.id, 25);
 
         if (response.success && response.data) {
           setCrawlStatuses((prev) => ({
@@ -431,6 +449,7 @@ export const CrawlManagement = () => {
             [competitor.name]: {
               competitor: competitor.name,
               status: 'success',
+              method: useAgent ? 'agent' : 'classic',
               message: `Found ${response.data.scrapedCount} new products`,
               results: response.data,
             },
@@ -453,15 +472,16 @@ export const CrawlManagement = () => {
           [competitor.name]: {
             competitor: competitor.name,
             status: 'error',
+            method: useAgent ? 'agent' : 'classic',
             message: errorMessage,
           },
         }));
         errorCount++;
       }
 
-      // Wait 3 seconds between crawls to avoid rate limiting
+      // Wait 5 seconds between crawls to avoid rate limiting (agent uses more API calls)
       if (i < activeCompetitors.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, useAgent ? 5000 : 3000));
       }
     }
 
@@ -636,23 +656,32 @@ export const CrawlManagement = () => {
 
         <TabsContent value="competitors" className="space-y-6">
           <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={handleBulkCrawl}
-            disabled={isBulkCrawling || competitors.length === 0}
-          >
-            {isBulkCrawling ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Crawling {bulkProgress.current}/{bulkProgress.total}
-              </>
-            ) : (
-              <>
-                <Zap className="mr-2 h-4 w-4" />
-                Crawl All
-              </>
-            )}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={() => handleBulkCrawl(true)}
+                  disabled={isBulkCrawling || competitors.length === 0}
+                >
+                  {isBulkCrawling ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Crawling {bulkProgress.current}/{bulkProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <Bot className="mr-2 h-4 w-4" />
+                      Smart Crawl All
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Uses AI to auto-detect product pages and extract data</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
@@ -850,29 +879,57 @@ export const CrawlManagement = () => {
                     </p>
                   )}
 
-                  <Button
-                    onClick={() => handleCrawl(competitor)}
-                    disabled={isCrawling || isBulkCrawling}
-                    className="w-full"
-                    variant={status?.status === 'success' ? 'outline' : 'default'}
-                  >
-                    {isCrawling ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Crawling...
-                      </>
-                    ) : status?.status === 'success' ? (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Crawl Again
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Start Crawl
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex gap-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => handleCrawl(competitor, true)}
+                            disabled={isCrawling || isBulkCrawling}
+                            className="flex-1"
+                            variant={status?.status === 'success' ? 'outline' : 'default'}
+                          >
+                            {isCrawling && status?.method === 'agent' ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                AI Crawling...
+                              </>
+                            ) : (
+                              <>
+                                <Bot className="mr-2 h-4 w-4" />
+                                Smart Crawl
+                              </>
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>AI auto-detects products (recommended)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => handleCrawl(competitor, false)}
+                            disabled={isCrawling || isBulkCrawling}
+                            variant="ghost"
+                            size="icon"
+                          >
+                            {isCrawling && status?.method === 'classic' ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Wrench className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Classic pattern-based crawl</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </CardContent>
               </Card>
             );

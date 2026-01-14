@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.send-notification-email]
 verify_jwt = false
+
+[functions.agent-scrape-competitor]
+verify_jwt = false
+
+[functions.check-agent-job]
+verify_jwt = false
