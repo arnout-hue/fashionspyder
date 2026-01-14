@@ -91,15 +91,18 @@ Deno.serve(async (req) => {
     // Verify this is a scheduled call (check for cron secret or service role)
     const authHeader = req.headers.get('Authorization');
     const cronSecret = Deno.env.get('CRON_SECRET');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    // Allow calls with service role key or matching cron secret
-    const isServiceRole = authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
-    const isValidCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
-    const isAnonWithSecret = authHeader?.includes(Deno.env.get('SUPABASE_ANON_KEY') || '');
+    // Use exact string comparison for security - do NOT use .includes()
+    const expectedServiceAuth = serviceRoleKey ? `Bearer ${serviceRoleKey}` : null;
+    const expectedCronAuth = cronSecret ? `Bearer ${cronSecret}` : null;
     
-    // For scheduled jobs from pg_cron, we accept the anon key
-    if (!isServiceRole && !isValidCron && !isAnonWithSecret) {
-      console.log('Unauthorized scheduled crawl attempt');
+    const isServiceRole = expectedServiceAuth && authHeader === expectedServiceAuth;
+    const isValidCron = expectedCronAuth && authHeader === expectedCronAuth;
+    
+    // Only allow service role key or cron secret - NOT the publicly-known anon key
+    if (!isServiceRole && !isValidCron) {
+      console.log('Unauthorized scheduled crawl attempt - invalid or missing credentials');
       return new Response(
         JSON.stringify({ success: false, error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
