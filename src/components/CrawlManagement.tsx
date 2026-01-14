@@ -12,9 +12,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
-import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock, Bot, Wrench } from 'lucide-react';
+import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock, Bot, ScanSearch, MoreVertical } from 'lucide-react';
 import { ScheduleAutomation } from '@/components/ScheduleAutomation';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 // URL validation helper
 function isValidHttpUrl(url: string): boolean {
@@ -773,37 +774,52 @@ export const CrawlManagement = () => {
                       )}
                       <CardTitle className="text-lg">{competitor.name}</CardTitle>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => openEditDialog(competitor)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete {competitor.name}?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will remove the competitor from your list. Existing scraped products will not be deleted.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteCompetitor(competitor)}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover">
+                        <DropdownMenuItem onClick={() => openEditDialog(competitor)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleCrawl(competitor, false)}
+                          disabled={isCrawling || isBulkCrawling}
+                        >
+                          <ScanSearch className="mr-2 h-4 w-4" />
+                          Classic Crawl
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem 
+                              className="text-destructive focus:text-destructive"
+                              onSelect={(e) => e.preventDefault()}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
                               Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete {competitor.name}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will remove the competitor from your list. Existing scraped products will not be deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteCompetitor(competitor)}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <CardDescription className="flex items-center gap-1 mt-1">
                     <a
@@ -904,28 +920,6 @@ export const CrawlManagement = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>AI auto-detects products (recommended)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() => handleCrawl(competitor, false)}
-                            disabled={isCrawling || isBulkCrawling}
-                            variant="ghost"
-                            size="icon"
-                          >
-                            {isCrawling && status?.method === 'classic' ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Wrench className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Classic pattern-based crawl</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
