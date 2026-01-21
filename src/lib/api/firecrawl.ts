@@ -4,6 +4,9 @@ type FirecrawlResponse<T = any> = {
   success: boolean;
   error?: string;
   data?: T;
+  jobId?: string;
+  competitorName?: string;
+  message?: string;
 };
 
 type ScrapeOptions = {
@@ -69,7 +72,8 @@ export const firecrawlApi = {
     return data;
   },
 
-  // Agent-based scraping with auto-detection (recommended)
+  // Agent-based scraping with async "fire and forget" pattern (recommended)
+  // Returns immediately with jobId, processes in background
   async agentScrapeCompetitor(competitorId: string, limit?: number): Promise<FirecrawlResponse> {
     const { data, error } = await supabase.functions.invoke('agent-scrape-competitor', {
       body: { competitor: competitorId, limit },
@@ -81,7 +85,21 @@ export const firecrawlApi = {
     return data;
   },
 
-  // Check status of a crawl job
+  // Check status of a crawl job by job ID
+  async getJobStatus(jobId: string): Promise<FirecrawlResponse> {
+    const { data, error } = await supabase
+      .from('crawl_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  },
+
+  // Check status of a crawl job (legacy method using edge function)
   async checkCrawlJob(jobId?: string, competitorId?: string): Promise<FirecrawlResponse> {
     const { data, error } = await supabase.functions.invoke('check-agent-job', {
       body: { jobId, competitorId },

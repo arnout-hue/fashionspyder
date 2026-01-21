@@ -346,49 +346,154 @@ export const CrawlManagement = () => {
         competitor: competitor.name, 
         status: 'crawling',
         method: useAgent ? 'agent' : 'classic',
+        message: 'Starting crawl...',
       },
     }));
 
     try {
-      // Use agent-based scraping by default, fall back to classic if needed
-      const response = useAgent 
-        ? await firecrawlApi.agentScrapeCompetitor(competitor.id, 50)
-        : await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+      if (useAgent) {
+        // Async pattern: start job and poll for status
+        const startResponse = await firecrawlApi.agentScrapeCompetitor(competitor.id, 50);
 
-      if (response.success && response.data) {
+        if (!startResponse.success) {
+          throw new Error(startResponse.error || 'Failed to start crawl job');
+        }
+
+        const jobId = startResponse.jobId;
+        console.log(`[CrawlManagement] Job started: ${jobId}`);
+
         setCrawlStatuses((prev) => ({
           ...prev,
           [competitor.name]: {
-            competitor: competitor.name,
-            status: 'success',
-            method: useAgent ? 'agent' : 'classic',
-            message: `Found ${response.data.scrapedCount} new products`,
-            results: response.data,
+            ...prev[competitor.name],
+            message: 'Crawling in progress...',
           },
         }));
 
-        // Save to crawl history
-        await saveCrawlHistory(competitor.id, 'success', response.data);
+        // Poll for status every 3 seconds
+        const pollInterval = setInterval(async () => {
+          const statusResponse = await firecrawlApi.getJobStatus(jobId);
 
-        // Update last_crawled_at
-        await supabase
-          .from('competitors')
-          .update({ last_crawled_at: new Date().toISOString() })
-          .eq('id', competitor.id);
+          if (!statusResponse.success) {
+            console.warn('[CrawlManagement] Failed to get job status');
+            return;
+          }
 
-        toast({
-          title: 'Crawl Complete',
-          description: `Found ${response.data.scrapedCount} new products from ${competitor.name}${response.data.method ? ` (${response.data.method})` : ''}`,
-        });
-        
-        fetchCompetitors();
+          const job = statusResponse.data;
+          console.log(`[CrawlManagement] Job status: ${job.status}`);
+
+          if (job.status === 'completed') {
+            clearInterval(pollInterval);
+
+            const results = {
+              totalUrlsFound: 0,
+              productUrlsFound: job.products_found || 0,
+              newProductUrls: job.products_inserted || 0,
+              scrapedCount: job.products_inserted || 0,
+              skippedCount: (job.products_found || 0) - (job.products_inserted || 0),
+              errorsCount: 0,
+              method: 'agent',
+            };
+
+            setCrawlStatuses((prev) => ({
+              ...prev,
+              [competitor.name]: {
+                competitor: competitor.name,
+                status: 'success',
+                method: 'agent',
+                message: `Found ${job.products_inserted} new products`,
+                results,
+              },
+            }));
+
+            await saveCrawlHistory(competitor.id, 'success', results);
+
+            toast({
+              title: 'Crawl Complete',
+              description: `Found ${job.products_inserted} new products from ${competitor.name}`,
+            });
+            
+            fetchCompetitors();
+          } else if (job.status === 'failed') {
+            clearInterval(pollInterval);
+
+            const errorMessage = job.error_message || 'Crawl failed';
+
+            await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
+
+            setCrawlStatuses((prev) => ({
+              ...prev,
+              [competitor.name]: {
+                competitor: competitor.name,
+                status: 'error',
+                method: 'agent',
+                message: errorMessage,
+              },
+            }));
+
+            toast({
+              title: 'Crawl Failed',
+              description: errorMessage,
+              variant: 'destructive',
+            });
+          }
+          // If still 'pending' or 'processing', keep polling
+        }, 3000);
+
+        // Safety timeout after 5 minutes to prevent infinite polling
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          // Check final status
+          firecrawlApi.getJobStatus(jobId).then((res) => {
+            if (res.success && res.data.status === 'processing') {
+              setCrawlStatuses((prev) => ({
+                ...prev,
+                [competitor.name]: {
+                  ...prev[competitor.name],
+                  status: 'success',
+                  message: 'Crawl may still be running in background. Refresh to see results.',
+                },
+              }));
+            }
+          });
+        }, 300000);
+
       } else {
-        throw new Error(response.error || 'Failed to crawl');
+        // Classic sync pattern (legacy)
+        const response = await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+
+        if (response.success && response.data) {
+          setCrawlStatuses((prev) => ({
+            ...prev,
+            [competitor.name]: {
+              competitor: competitor.name,
+              status: 'success',
+              method: 'classic',
+              message: `Found ${response.data.scrapedCount} new products`,
+              results: response.data,
+            },
+          }));
+
+          await saveCrawlHistory(competitor.id, 'success', response.data);
+
+          await supabase
+            .from('competitors')
+            .update({ last_crawled_at: new Date().toISOString() })
+            .eq('id', competitor.id);
+
+          toast({
+            title: 'Crawl Complete',
+            description: `Found ${response.data.scrapedCount} new products from ${competitor.name}`,
+          });
+          
+          fetchCompetitors();
+        } else {
+          throw new Error(response.error || 'Failed to crawl');
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
       
-      // Save error to crawl history
       await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
       
       setCrawlStatuses((prev) => ({
@@ -423,8 +528,8 @@ export const CrawlManagement = () => {
     setIsBulkCrawling(true);
     setBulkProgress({ current: 0, total: activeCompetitors.length });
 
-    let successCount = 0;
-    let errorCount = 0;
+    // For async pattern, we start all jobs but don't wait for completion
+    const jobPromises: Promise<void>[] = [];
 
     for (let i = 0; i < activeCompetitors.length; i++) {
       const competitor = activeCompetitors[i];
@@ -436,63 +541,90 @@ export const CrawlManagement = () => {
           competitor: competitor.name, 
           status: 'crawling',
           method: useAgent ? 'agent' : 'classic',
+          message: 'Starting...',
         },
       }));
 
-      try {
-        const response = useAgent
-          ? await firecrawlApi.agentScrapeCompetitor(competitor.id, 50)
-          : await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+      // Start the job
+      const jobPromise = (async () => {
+        try {
+          if (useAgent) {
+            const startResponse = await firecrawlApi.agentScrapeCompetitor(competitor.id, 50);
+            
+            if (!startResponse.success) {
+              throw new Error(startResponse.error || 'Failed to start');
+            }
 
-        if (response.success && response.data) {
+            setCrawlStatuses((prev) => ({
+              ...prev,
+              [competitor.name]: {
+                ...prev[competitor.name],
+                message: 'Crawling in background...',
+              },
+            }));
+
+            // For bulk, we just start the jobs and let them run
+            // User can refresh to see results
+          } else {
+            const response = await firecrawlApi.scrapeCompetitor(competitor.id, 25);
+            
+            if (response.success && response.data) {
+              setCrawlStatuses((prev) => ({
+                ...prev,
+                [competitor.name]: {
+                  competitor: competitor.name,
+                  status: 'success',
+                  method: 'classic',
+                  message: `Found ${response.data.scrapedCount} new products`,
+                  results: response.data,
+                },
+              }));
+              await saveCrawlHistory(competitor.id, 'success', response.data);
+            } else {
+              throw new Error(response.error || 'Failed to crawl');
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
+          await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
+          
           setCrawlStatuses((prev) => ({
             ...prev,
             [competitor.name]: {
               competitor: competitor.name,
-              status: 'success',
+              status: 'error',
               method: useAgent ? 'agent' : 'classic',
-              message: `Found ${response.data.scrapedCount} new products`,
-              results: response.data,
+              message: errorMessage,
             },
           }));
-          
-          // Save to crawl history
-          await saveCrawlHistory(competitor.id, 'success', response.data);
-          successCount++;
-        } else {
-          throw new Error(response.error || 'Failed to crawl');
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to crawl';
-        
-        // Save error to crawl history
-        await saveCrawlHistory(competitor.id, 'error', undefined, errorMessage);
-        
-        setCrawlStatuses((prev) => ({
-          ...prev,
-          [competitor.name]: {
-            competitor: competitor.name,
-            status: 'error',
-            method: useAgent ? 'agent' : 'classic',
-            message: errorMessage,
-          },
-        }));
-        errorCount++;
-      }
+      })();
 
-      // Wait 5 seconds between crawls to avoid rate limiting (agent uses more API calls)
+      jobPromises.push(jobPromise);
+
+      // Delay between starting jobs
       if (i < activeCompetitors.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, useAgent ? 5000 : 3000));
+        await new Promise(resolve => setTimeout(resolve, useAgent ? 2000 : 3000));
       }
     }
 
-    setIsBulkCrawling(false);
-    fetchCompetitors();
+    // Wait for all job starts to complete
+    await Promise.all(jobPromises);
 
-    toast({
-      title: 'Bulk Crawl Complete',
-      description: `${successCount} succeeded, ${errorCount} failed`,
-    });
+    setIsBulkCrawling(false);
+    
+    if (useAgent) {
+      toast({
+        title: 'Bulk Crawl Started',
+        description: `Started ${activeCompetitors.length} crawl jobs. They will complete in the background.`,
+      });
+    } else {
+      fetchCompetitors();
+      toast({
+        title: 'Bulk Crawl Complete',
+        description: `Processed ${activeCompetitors.length} competitors`,
+      });
+    }
   };
 
   const handleApplyGlobalFilters = async () => {
