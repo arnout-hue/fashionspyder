@@ -73,22 +73,28 @@ Deno.serve(async (req) => {
       : '';
 
     const agentPrompt = `You are scraping an e-commerce website to find new/recent products.
-    
+
 Starting from the page: ${competitor.scrape_url}
 
 Your task:
-1. Find all product listings on this page (this is usually a "new arrivals" or "nieuw" section)
+1. Find all product listings on this page
 2. For each product found, extract:
    - Product name (without the brand name suffix)
    - Price with currency symbol (e.g., €49.95)
-   - Main product image URL (the primary product photo, not thumbnails or icons)
+   - Main product image URL - IMPORTANT: This must be the actual image file URL (ending in .jpg, .png, .webp etc), NOT the product page URL
    - Product page URL
+
+CRITICAL for image_url:
+- Look for <img> tags within product cards
+- The image URL typically contains '/cdn/', '/images/', '/media/', or '/assets/'
+- It should NOT be the same as the product_url
+- If you cannot find a proper image URL, leave it empty rather than using the product page URL
 
 ${excludedCategoriesText}
 
-Focus on clothing items (dresses, tops, pants, skirts, jackets, etc.) and ignore accessories, bags, jewelry, shoes unless they are clearly main products.
+Focus on clothing items and ignore accessories, bags, jewelry, shoes unless clearly main products.
 
-Return up to ${limit} products, prioritizing the newest/most recently added items.`;
+Return up to ${limit} products, prioritizing the newest items.`;
 
     // Define the JSON schema for product extraction
     const productSchema = {
@@ -189,8 +195,14 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
     console.log(`[Agent] Extracted ${products.length} products directly`);
     console.log(`[Agent] Found ${links.length} links on page`);
 
-    // If direct extraction found products, use them
-    if (products.length > 0) {
+    // Determine if direct extraction was successful
+    // We treat it as a failure if fewer than 3 products - likely partial extraction
+    const MIN_PRODUCTS_FOR_SUCCESS = 3;
+    const isDirectExtractionSuccessful = products.length >= MIN_PRODUCTS_FOR_SUCCESS;
+
+    if (isDirectExtractionSuccessful) {
+      console.log(`[Agent] Direct extraction successful with ${products.length} products`);
+      
       // Insert products into database
       const productsToInsert = products
         .filter((p: any) => p.name && p.product_url)
@@ -198,21 +210,25 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
           name: cleanProductName(p.name),
           price: p.price || null,
           image_url: cleanImageUrl(p.image_url, competitor!.scrape_url),
-          product_url: p.product_url,
+          product_url: normalizeProductUrl(p.product_url),
           competitor: competitor!.name,
         }));
 
       console.log(`[Agent] Prepared ${productsToInsert.length} products for insertion`);
 
-      // Check for existing products
+      // Check for existing products using normalized URLs
       const productUrls = productsToInsert.map((p: any) => p.product_url);
       const { data: existingProducts } = await supabase
         .from('products')
         .select('product_url')
-        .in('product_url', productUrls);
+        .eq('competitor', competitor.name);
 
-      const existingUrls = new Set(existingProducts?.map((p: any) => p.product_url) || []);
-      const newProducts = productsToInsert.filter((p: any) => !existingUrls.has(p.product_url));
+      const existingUrls = new Set(
+        existingProducts?.map((p: any) => normalizeProductUrl(p.product_url)) || []
+      );
+      const newProducts = productsToInsert.filter((p: any) => 
+        !existingUrls.has(normalizeProductUrl(p.product_url))
+      );
 
       console.log(`[Agent] ${existingUrls.size} already exist, ${newProducts.length} are new`);
 
@@ -265,6 +281,9 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    // Direct extraction yielded too few products, trigger fallback
+    console.log(`[Agent] Direct extraction yielded only ${products.length} items. Triggering fallback...`);
 
     // If no products extracted directly, we need to crawl individual product pages
     // Filter links to find potential product URLs
@@ -273,14 +292,18 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
     const productLinks = links.filter((url: string) => isLikelyProductUrl(url, competitor!.scrape_url));
     console.log(`[Agent] Found ${productLinks.length} potential product URLs from links`);
 
-    // Check which URLs are new
+    // Check which URLs are new using normalized URLs
     const { data: existingProducts } = await supabase
       .from('products')
       .select('product_url')
       .eq('competitor', competitor.name);
 
-    const existingUrls = new Set(existingProducts?.map((p: any) => p.product_url) || []);
-    const newProductLinks = productLinks.filter((url: string) => !existingUrls.has(url));
+    const existingUrls = new Set(
+      existingProducts?.map((p: any) => normalizeProductUrl(p.product_url)) || []
+    );
+    const newProductLinks = productLinks.filter((url: string) => 
+      !existingUrls.has(normalizeProductUrl(url))
+    );
     
     console.log(`[Agent] ${newProductLinks.length} are new product URLs`);
 
@@ -380,48 +403,77 @@ Return up to ${limit} products, prioritizing the newest/most recently added item
   }
 });
 
+// Helper: Normalize product URL for deduplication (strip query params)
+function normalizeProductUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.origin + urlObj.pathname;
+  } catch {
+    return url;
+  }
+}
+
 // Helper: Check if URL is likely a product page
 function isLikelyProductUrl(url: string, baseUrl: string): boolean {
   try {
     const urlObj = new URL(url, baseUrl);
     const path = urlObj.pathname.toLowerCase();
 
-    // Exclude non-product pages
-    const excludePatterns = [
-      '/cart', '/checkout', '/account', '/login', '/wishlist', '/register',
-      '/search', '/filter', '/sort', '/page/', '/pagina/',
-      '/info/', '/customer/', '/returns/', '/shipping/', '/privacy', '/terms',
-      '/faq', '/contact', '/about', '/blog/', '/news/', '/brands/', '/stores/',
-      '/collections/', '/category/', '/categorie/', '/c/', '/shop',
+    // 1. CHECK STRONG PRODUCT INDICATORS FIRST
+    // If these exist, we trust it's a product even inside a 'collection' path
+    const strongIndicators = [
+      '/products/',  // Shopify standard
+      '/product/',   // WooCommerce / Magento
+      '/item/',
+      '/p/',
+      '/dp/',        // Amazon style
+      '/artikel/',   // Dutch
+      '/winkel/',    // Dutch WooCommerce
     ];
 
-    for (const pattern of excludePatterns) {
-      if (path.includes(pattern) || path === '/' || path.length < 10) {
-        return false;
-      }
-    }
-
-    // Product indicators
-    const productIndicators = [
-      '/products/', '/product/', '/p/', '/item/', '/artikel/',
-      '/winkel/', // Dutch for shop - WooCommerce sites
-    ];
-
-    for (const indicator of productIndicators) {
+    for (const indicator of strongIndicators) {
       if (path.includes(indicator)) {
         return true;
       }
     }
 
-    // Long slug with hypens = likely product
-    const segments = path.split('/').filter(Boolean);
-    const lastSegment = segments[segments.length - 1] || '';
-    if (lastSegment.length > 20 && lastSegment.includes('-')) {
+    // 2. Check for numeric product ID patterns (common in many CMS)
+    // e.g., /kleding/jassen/product-name/426398-BRN.html
+    if (/\/\d{5,}[.-]/.test(path) || /\/\d{5,}\.html/.test(path)) {
       return true;
     }
 
-    // Numeric product ID patterns
-    if (/\/\d{5,}-/.test(path) || /^\d{5,}/.test(lastSegment)) {
+    // 3. NOW check exclusion patterns
+    // REMOVED: '/collections/', '/category/', '/categorie/', '/c/', '/shop'
+    const excludePatterns = [
+      '/cart', '/checkout', '/account', '/login', '/wishlist', '/register',
+      '/search', '/filter', '/sort', '/page/', '/pagina/',
+      '/info/', '/customer/', '/returns/', '/shipping/', '/privacy', '/terms',
+      '/faq', '/contact', '/about', '/blog/', '/news/', '/brands/', '/stores/',
+    ];
+
+    for (const pattern of excludePatterns) {
+      if (path.includes(pattern)) {
+        return false;
+      }
+    }
+
+    // 4. Reject root path and very short paths
+    if (path === '/' || path.length < 10) {
+      return false;
+    }
+
+    // 5. Heuristics for clean URLs
+    const segments = path.split('/').filter(Boolean);
+    const lastSegment = segments[segments.length - 1] || '';
+
+    // Deep path with slug-like last segment
+    if (segments.length >= 2 && lastSegment.length > 15 && lastSegment.includes('-')) {
+      return true;
+    }
+
+    // Has .html extension (common in PrestaShop, Magento)
+    if (lastSegment.endsWith('.html') && segments.length >= 3) {
       return true;
     }
 
@@ -492,6 +544,16 @@ function cleanImageUrl(imageUrl: string | null | undefined, baseUrl: string): st
 
   let cleaned = imageUrl.trim();
 
+  // Reject if it looks like an HTML page (product URL mistakenly used as image)
+  if (cleaned.endsWith('.html') || 
+      cleaned.includes('/shop/') || 
+      cleaned.includes('/products/') ||
+      cleaned.includes('/product/') ||
+      cleaned.includes('/collections/')) {
+    console.log(`[Agent] Rejected non-image URL: ${cleaned.slice(0, 80)}...`);
+    return null;
+  }
+
   // Handle double-domain URLs
   const doubleHttpMatch = cleaned.match(/https?:\/\/[^/]+?(https?:\/\/.+)/i);
   if (doubleHttpMatch) {
@@ -516,6 +578,21 @@ function cleanImageUrl(imageUrl: string | null | undefined, baseUrl: string): st
   try {
     const urlObj = new URL(cleaned);
     if (!urlObj.protocol.startsWith('http')) return null;
+    
+    // Validate it looks like an image
+    const path = urlObj.pathname.toLowerCase();
+    const hasImageExtension = /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(cleaned);
+    const hasImageIndicator = path.includes('/image') || path.includes('/img') || 
+                              path.includes('/photo') || path.includes('/cdn') ||
+                              path.includes('media') || path.includes('assets') ||
+                              path.includes('static');
+    
+    // Accept if it has image extension OR image path indicator
+    if (!hasImageExtension && !hasImageIndicator) {
+      console.log(`[Agent] URL doesn't look like an image: ${cleaned.slice(0, 80)}...`);
+      return null;
+    }
+    
     return cleaned;
   } catch {
     return null;
