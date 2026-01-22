@@ -264,6 +264,63 @@ export type Database = {
           },
         ]
       }
+      crawl_logs: {
+        Row: {
+          competitor_id: string | null
+          created_at: string | null
+          details: Json | null
+          filter_reason: string | null
+          id: string
+          job_id: string | null
+          log_type: string
+          message: string
+          product_name: string | null
+          product_price: string | null
+          product_url: string | null
+        }
+        Insert: {
+          competitor_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          filter_reason?: string | null
+          id?: string
+          job_id?: string | null
+          log_type: string
+          message: string
+          product_name?: string | null
+          product_price?: string | null
+          product_url?: string | null
+        }
+        Update: {
+          competitor_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          filter_reason?: string | null
+          id?: string
+          job_id?: string | null
+          log_type?: string
+          message?: string
+          product_name?: string | null
+          product_price?: string | null
+          product_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crawl_logs_competitor_id_fkey"
+            columns: ["competitor_id"]
+            isOneToOne: false
+            referencedRelation: "competitors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crawl_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "crawl_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crawl_schedule: {
         Row: {
           created_at: string | null

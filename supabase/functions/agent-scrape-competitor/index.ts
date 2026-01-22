@@ -14,6 +14,18 @@ interface CompetitorConfig {
   excluded_categories: string[];
 }
 
+interface CrawlLogEntry {
+  job_id: string;
+  competitor_id: string;
+  log_type: 'info' | 'added' | 'filtered' | 'skipped' | 'error';
+  message: string;
+  product_name?: string;
+  product_url?: string;
+  product_price?: string;
+  filter_reason?: string;
+  details?: Record<string, unknown>;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -116,6 +128,17 @@ Deno.serve(async (req) => {
   }
 });
 
+// Helper to batch insert logs
+async function insertLogs(supabase: any, logs: CrawlLogEntry[]) {
+  if (logs.length === 0) return;
+  
+  try {
+    await supabase.from('crawl_logs').insert(logs);
+  } catch (error) {
+    console.error('[Agent] Failed to insert logs:', error);
+  }
+}
+
 // Background processing function
 async function processCrawlJob(
   jobId: string,
@@ -125,6 +148,15 @@ async function processCrawlJob(
   supabase: any
 ) {
   console.log(`[Agent] Background: Starting job ${jobId} for ${competitor.name}`);
+  
+  const logs: CrawlLogEntry[] = [];
+  const addLog = (entry: Omit<CrawlLogEntry, 'job_id' | 'competitor_id'>) => {
+    logs.push({
+      job_id: jobId,
+      competitor_id: competitor.id,
+      ...entry,
+    });
+  };
 
   try {
     // Update status to processing
@@ -132,6 +164,12 @@ async function processCrawlJob(
       .from('crawl_jobs')
       .update({ status: 'processing', updated_at: new Date().toISOString() })
       .eq('id', jobId);
+
+    addLog({
+      log_type: 'info',
+      message: `Started crawl job for ${competitor.name}`,
+      details: { scrape_url: competitor.scrape_url, limit },
+    });
 
     console.log(`[Agent] Background: Scrape URL: ${competitor.scrape_url}`);
 
@@ -186,6 +224,11 @@ Return up to ${limit} products, prioritizing the newest items.`;
     };
 
     console.log('[Agent] Background: Starting Firecrawl deep scrape job...');
+    addLog({
+      log_type: 'info',
+      message: 'Starting Firecrawl scrape',
+      details: { excluded_categories: competitor.excluded_categories },
+    });
 
     // Retry logic with exponential backoff for timeouts
     const maxRetries = 3;
@@ -219,12 +262,22 @@ Return up to ${limit} products, prioritizing the newest items.`;
       if (deepScrapeResponse.ok) {
         scrapeData = await deepScrapeResponse.json();
         console.log('[Agent] Background: Firecrawl response received');
+        addLog({
+          log_type: 'info',
+          message: `Firecrawl response received on attempt ${attempt}`,
+        });
         break;
       }
 
       const errorText = await deepScrapeResponse.text();
       lastError = `${deepScrapeResponse.status}: ${errorText.slice(0, 200)}`;
       console.warn(`[Agent] Background: Attempt ${attempt} failed: ${lastError}`);
+      
+      addLog({
+        log_type: 'error',
+        message: `Firecrawl attempt ${attempt} failed`,
+        details: { status: deepScrapeResponse.status, error: lastError },
+      });
 
       if (deepScrapeResponse.status !== 408 && deepScrapeResponse.status < 500) {
         console.error('[Agent] Background: Non-retryable error, stopping');
@@ -240,6 +293,14 @@ Return up to ${limit} products, prioritizing the newest items.`;
 
     if (!scrapeData) {
       console.error('[Agent] Background: All retries failed:', lastError);
+      addLog({
+        log_type: 'error',
+        message: `All ${maxRetries} Firecrawl attempts failed`,
+        details: { last_error: lastError },
+      });
+      
+      await insertLogs(supabase, logs);
+      
       await supabase
         .from('crawl_jobs')
         .update({
@@ -261,6 +322,12 @@ Return up to ${limit} products, prioritizing the newest items.`;
 
     console.log(`[Agent] Background: Extracted ${products.length} products directly`);
     console.log(`[Agent] Background: Found ${links.length} links on page`);
+    
+    addLog({
+      log_type: 'info',
+      message: `Extracted ${products.length} products, found ${links.length} links`,
+      details: { products_count: products.length, links_count: links.length },
+    });
 
     const MIN_PRODUCTS_FOR_SUCCESS = 3;
     const isDirectExtractionSuccessful = products.length >= MIN_PRODUCTS_FOR_SUCCESS;
@@ -271,19 +338,72 @@ Return up to ${limit} products, prioritizing the newest items.`;
     if (isDirectExtractionSuccessful) {
       console.log(`[Agent] Background: Direct extraction successful with ${products.length} products`);
       
-      const productsToInsert = products
-        .filter((p: any) => p.name && p.product_url)
-        .map((p: any) => ({
+      // Process and filter products with detailed logging
+      const validProducts: any[] = [];
+      
+      for (const p of products) {
+        // Check if product has required fields
+        if (!p.name || !p.product_url) {
+          addLog({
+            log_type: 'filtered',
+            message: 'Missing required fields',
+            product_name: p.name || '(no name)',
+            product_url: p.product_url || '(no url)',
+            filter_reason: 'Missing name or product_url',
+          });
+          continue;
+        }
+        
+        // Check excluded categories
+        const excludedCategory = competitor.excluded_categories?.find((cat: string) => 
+          p.product_url.toLowerCase().includes(cat.toLowerCase()) ||
+          p.name.toLowerCase().includes(cat.toLowerCase())
+        );
+        
+        if (excludedCategory) {
+          addLog({
+            log_type: 'filtered',
+            message: `Excluded by category filter: ${excludedCategory}`,
+            product_name: p.name,
+            product_url: p.product_url,
+            product_price: p.price,
+            filter_reason: `Matches excluded category: ${excludedCategory}`,
+          });
+          continue;
+        }
+        
+        // Clean and validate image URL
+        const cleanedImageUrl = cleanImageUrl(p.image_url, competitor.scrape_url);
+        if (p.image_url && !cleanedImageUrl) {
+          addLog({
+            log_type: 'info',
+            message: 'Image URL rejected (invalid format)',
+            product_name: p.name,
+            product_url: p.product_url,
+            details: { original_image_url: p.image_url },
+          });
+        }
+        
+        // Clean price - convert to numeric format
+        const cleanedPrice = cleanPrice(p.price);
+        
+        validProducts.push({
           name: cleanProductName(p.name),
-          price: p.price || null,
-          image_url: cleanImageUrl(p.image_url, competitor.scrape_url),
+          price: cleanedPrice,
+          image_url: cleanedImageUrl,
           product_url: normalizeProductUrl(p.product_url),
           competitor: competitor.name,
-        }));
+        });
+      }
 
-      console.log(`[Agent] Background: Prepared ${productsToInsert.length} products for insertion`);
+      console.log(`[Agent] Background: Prepared ${validProducts.length} products for insertion`);
+      addLog({
+        log_type: 'info',
+        message: `${validProducts.length} products passed filters, ${products.length - validProducts.length} filtered out`,
+      });
 
-      const productUrls = productsToInsert.map((p: any) => p.product_url);
+      // Check for duplicates
+      const productUrls = validProducts.map((p: any) => p.product_url);
       const { data: existingProducts } = await supabase
         .from('products')
         .select('product_url')
@@ -292,23 +412,57 @@ Return up to ${limit} products, prioritizing the newest items.`;
       const existingUrls = new Set(
         existingProducts?.map((p: any) => normalizeProductUrl(p.product_url)) || []
       );
-      const newProducts = productsToInsert.filter((p: any) => 
-        !existingUrls.has(normalizeProductUrl(p.product_url))
-      );
+      
+      const newProducts: any[] = [];
+      for (const p of validProducts) {
+        const normalizedUrl = normalizeProductUrl(p.product_url);
+        if (existingUrls.has(normalizedUrl)) {
+          addLog({
+            log_type: 'skipped',
+            message: 'Already exists in database',
+            product_name: p.name,
+            product_url: p.product_url,
+            product_price: p.price?.toString(),
+            filter_reason: 'Duplicate - product already scraped',
+          });
+        } else {
+          newProducts.push(p);
+        }
+      }
 
       console.log(`[Agent] Background: ${existingUrls.size} already exist, ${newProducts.length} are new`);
+      addLog({
+        log_type: 'info',
+        message: `${existingUrls.size} duplicates skipped, ${newProducts.length} new products to insert`,
+      });
 
       if (newProducts.length > 0) {
         const { error: insertError, data: insertedData } = await supabase
           .from('products')
           .insert(newProducts)
-          .select('id');
+          .select('id, name, product_url, price');
 
         if (insertError) {
           console.error('[Agent] Background: Insert error:', insertError);
+          addLog({
+            log_type: 'error',
+            message: 'Database insert failed',
+            details: { error: insertError.message, code: insertError.code },
+          });
         } else {
           insertedCount = insertedData?.length || 0;
           console.log(`[Agent] Background: Successfully inserted ${insertedCount} products`);
+          
+          // Log each inserted product
+          for (const inserted of insertedData || []) {
+            addLog({
+              log_type: 'added',
+              message: 'Product added to database',
+              product_name: inserted.name,
+              product_url: inserted.product_url,
+              product_price: inserted.price?.toString(),
+            });
+          }
         }
       }
 
@@ -328,9 +482,19 @@ Return up to ${limit} products, prioritizing the newest items.`;
       // Fallback: crawl individual product pages
       console.log(`[Agent] Background: Direct extraction yielded only ${products.length} items. Triggering fallback...`);
       method = 'agent-crawl';
+      
+      addLog({
+        log_type: 'info',
+        message: `Direct extraction insufficient (${products.length} < ${MIN_PRODUCTS_FOR_SUCCESS}), using fallback crawl`,
+      });
 
       const productLinks = links.filter((url: string) => isLikelyProductUrl(url, competitor.scrape_url));
       console.log(`[Agent] Background: Found ${productLinks.length} potential product URLs from links`);
+      
+      addLog({
+        log_type: 'info',
+        message: `Found ${productLinks.length} potential product URLs from ${links.length} total links`,
+      });
 
       const { data: existingProducts } = await supabase
         .from('products')
@@ -345,6 +509,10 @@ Return up to ${limit} products, prioritizing the newest items.`;
       );
       
       console.log(`[Agent] Background: ${newProductLinks.length} are new product URLs`);
+      addLog({
+        log_type: 'info',
+        message: `${productLinks.length - newProductLinks.length} URLs already exist, ${newProductLinks.length} are new`,
+      });
 
       const urlsToScrape = newProductLinks.slice(0, Math.min(limit, 25));
       console.log(`[Agent] Background: Will scrape ${urlsToScrape.length} products`);
@@ -356,41 +524,83 @@ Return up to ${limit} products, prioritizing the newest items.`;
         try {
           const productData = await extractProductFromUrl(url, firecrawlApiKey);
           if (productData) {
-            const shouldExclude = competitor.excluded_categories?.some((cat: string) => 
+            const excludedCategory = competitor.excluded_categories?.find((cat: string) => 
               url.toLowerCase().includes(cat.toLowerCase()) ||
               productData.name?.toLowerCase().includes(cat.toLowerCase())
             );
 
-            if (!shouldExclude) {
+            if (excludedCategory) {
+              addLog({
+                log_type: 'filtered',
+                message: `Excluded by category filter: ${excludedCategory}`,
+                product_name: productData.name,
+                product_url: url,
+                product_price: productData.price,
+                filter_reason: `Matches excluded category: ${excludedCategory}`,
+              });
+            } else {
+              const cleanedPrice = cleanPrice(productData.price);
               scrapedProducts.push({
                 name: cleanProductName(productData.name),
-                price: productData.price || null,
+                price: cleanedPrice,
                 image_url: cleanImageUrl(productData.image_url, competitor.scrape_url),
                 product_url: url,
                 competitor: competitor.name,
               });
             }
+          } else {
+            addLog({
+              log_type: 'error',
+              message: 'Failed to extract product data',
+              product_url: url,
+              filter_reason: 'No data returned from scrape',
+            });
           }
         } catch (err) {
           console.error(`[Agent] Background: Error scraping ${url}:`, err);
           errors.push(url);
+          addLog({
+            log_type: 'error',
+            message: 'Scrape failed with exception',
+            product_url: url,
+            details: { error: err instanceof Error ? err.message : 'Unknown error' },
+          });
         }
 
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       console.log(`[Agent] Background: Scraped ${scrapedProducts.length} products, ${errors.length} errors`);
+      addLog({
+        log_type: 'info',
+        message: `Fallback completed: ${scrapedProducts.length} products scraped, ${errors.length} errors`,
+      });
 
       if (scrapedProducts.length > 0) {
         const { error: insertError, data: insertedData } = await supabase
           .from('products')
           .insert(scrapedProducts)
-          .select('id');
+          .select('id, name, product_url, price');
 
         if (insertError) {
           console.error('[Agent] Background: Insert error:', insertError);
+          addLog({
+            log_type: 'error',
+            message: 'Database insert failed',
+            details: { error: insertError.message, code: insertError.code },
+          });
         } else {
           insertedCount = insertedData?.length || 0;
+          
+          for (const inserted of insertedData || []) {
+            addLog({
+              log_type: 'added',
+              message: 'Product added to database',
+              product_name: inserted.name,
+              product_url: inserted.product_url,
+              product_price: inserted.price?.toString(),
+            });
+          }
         }
       }
 
@@ -413,10 +623,22 @@ Return up to ${limit} products, prioritizing the newest items.`;
       .update({ last_crawled_at: new Date().toISOString() })
       .eq('id', competitor.id);
 
+    addLog({
+      log_type: 'info',
+      message: `Job completed via ${method}. Inserted ${insertedCount} products.`,
+      details: { method, inserted_count: insertedCount },
+    });
+
     console.log(`[Agent] Background: Job ${jobId} completed. Inserted ${insertedCount} products via ${method}`);
 
   } catch (error) {
     console.error('[Agent] Background: Fatal error:', error);
+    addLog({
+      log_type: 'error',
+      message: 'Fatal error during crawl',
+      details: { error: error instanceof Error ? error.message : 'Unknown error' },
+    });
+    
     await supabase
       .from('crawl_jobs')
       .update({
@@ -427,6 +649,33 @@ Return up to ${limit} products, prioritizing the newest items.`;
       })
       .eq('id', jobId);
   }
+  
+  // Insert all logs at the end
+  await insertLogs(supabase, logs);
+}
+
+// Helper: Clean price string to numeric value
+function cleanPrice(price: string | null | undefined): number | null {
+  if (!price) return null;
+  
+  // Remove currency symbols and whitespace
+  let cleaned = price.replace(/[€$£¥₹\s]/g, '').trim();
+  
+  // Handle European format (comma as decimal separator)
+  // If there's a comma and the part after it is 2 digits, treat comma as decimal
+  if (/,\d{2}$/.test(cleaned) && !cleaned.includes('.')) {
+    cleaned = cleaned.replace(',', '.');
+  } else {
+    // Remove commas used as thousand separators
+    cleaned = cleaned.replace(/,/g, '');
+  }
+  
+  // Extract just the numeric part
+  const match = cleaned.match(/[\d.]+/);
+  if (!match) return null;
+  
+  const num = parseFloat(match[0]);
+  return isNaN(num) ? null : num;
 }
 
 // Helper: Normalize product URL for deduplication (strip query params)
@@ -499,8 +748,11 @@ function isLikelyProductUrl(url: string, baseUrl: string): boolean {
   }
 }
 
-// Helper: Extract product from a single URL
-async function extractProductFromUrl(url: string, apiKey: string): Promise<{ name: string; price?: string; image_url?: string } | null> {
+// Helper: Extract product data from a single URL
+async function extractProductFromUrl(
+  url: string,
+  apiKey: string
+): Promise<{ name: string; price?: string; image_url?: string } | null> {
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -512,7 +764,10 @@ async function extractProductFromUrl(url: string, apiKey: string): Promise<{ nam
         url,
         formats: ['extract'],
         extract: {
-          prompt: 'Extract the product name (without brand suffix), price with currency, and main product image URL.',
+          prompt: `Extract the main product information from this page:
+1. Product name (clean, without brand suffix)
+2. Price with currency symbol
+3. Main product image URL (must be an actual image file URL ending in .jpg, .png, .webp, NOT the page URL)`,
           schema: {
             type: 'object',
             properties: {
@@ -523,8 +778,7 @@ async function extractProductFromUrl(url: string, apiKey: string): Promise<{ nam
             required: ['name'],
           },
         },
-        onlyMainContent: true,
-        waitFor: 2000,
+        timeout: 30000,
       }),
     });
 
@@ -534,12 +788,16 @@ async function extractProductFromUrl(url: string, apiKey: string): Promise<{ nam
 
     const data = await response.json();
     const extracted = data.data?.extract || data.extract;
-    
-    if (!extracted?.name) {
-      return null;
+
+    if (extracted?.name) {
+      return {
+        name: extracted.name,
+        price: extracted.price,
+        image_url: extracted.image_url,
+      };
     }
 
-    return extracted;
+    return null;
   } catch {
     return null;
   }
@@ -547,63 +805,51 @@ async function extractProductFromUrl(url: string, apiKey: string): Promise<{ nam
 
 // Helper: Clean product name
 function cleanProductName(name: string): string {
-  if (!name) return 'Unknown Product';
-  return name
-    .replace(/\s*[|\-–—]\s*[^|\-–—]+$/, '')
-    .replace(/^\s+|\s+$/g, '')
-    .replace(/\s+/g, ' ');
+  if (!name) return name;
+  
+  // Remove common suffixes
+  let cleaned = name
+    .replace(/\s*[-–|]\s*(Shop|Buy|Online|Sale|New|Limited).*$/i, '')
+    .replace(/\s*\|\s*.*$/, '')
+    .trim();
+  
+  // Limit length
+  if (cleaned.length > 200) {
+    cleaned = cleaned.substring(0, 197) + '...';
+  }
+  
+  return cleaned;
 }
 
-// Helper: Clean image URL
+// Helper: Clean and validate image URL
 function cleanImageUrl(imageUrl: string | null | undefined, baseUrl: string): string | null {
-  if (!imageUrl || typeof imageUrl !== 'string') return null;
-
-  let cleaned = imageUrl.trim();
-
-  if (cleaned.endsWith('.html') || 
-      cleaned.includes('/shop/') || 
-      cleaned.includes('/products/') ||
-      cleaned.includes('/product/') ||
-      cleaned.includes('/collections/')) {
-    console.log(`[Agent] Rejected non-image URL: ${cleaned.slice(0, 80)}...`);
-    return null;
-  }
-
-  const doubleHttpMatch = cleaned.match(/https?:\/\/[^/]+?(https?:\/\/.+)/i);
-  if (doubleHttpMatch) {
-    cleaned = doubleHttpMatch[1];
-  }
-
-  if (cleaned.startsWith('//')) {
-    cleaned = 'https:' + cleaned;
-  }
-
-  if (cleaned.startsWith('/') && !cleaned.startsWith('//')) {
-    try {
-      const base = new URL(baseUrl);
-      cleaned = base.origin + cleaned;
-    } catch {
-      return null;
-    }
-  }
-
+  if (!imageUrl) return null;
+  
   try {
-    const urlObj = new URL(cleaned);
-    if (!urlObj.protocol.startsWith('http')) return null;
+    // Make URL absolute if relative
+    const url = new URL(imageUrl, baseUrl);
+    const urlString = url.href;
     
-    const path = urlObj.pathname.toLowerCase();
-    const hasImageExtension = /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i.test(cleaned);
-    const hasImageIndicator = path.includes('/image') || path.includes('/img') || 
-                              path.includes('/photo') || path.includes('/cdn') ||
-                              path.includes('media') || path.includes('assets') ||
-                              path.includes('static');
+    // Check if it looks like an image
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif'];
+    const hasImageExtension = imageExtensions.some(ext => 
+      url.pathname.toLowerCase().includes(ext)
+    );
     
-    if (!hasImageExtension && !hasImageIndicator) {
-      console.log(`[Agent] URL doesn't look like an image: ${cleaned.slice(0, 80)}...`);
+    const hasImagePath = /\/(cdn|images?|media|assets|uploads|files|static)/i.test(url.pathname);
+    
+    // Reject if it doesn't look like an image
+    if (!hasImageExtension && !hasImagePath) {
+      console.info(`[Agent] Rejected non-image URL: ${urlString.substring(0, 80)}...`);
       return null;
     }
     
-    return cleaned;
+    // Reject if it's too short or looks like a product page
+    if (url.pathname.length < 10) {
+      return null;
+    }
+    
+    return urlString;
   } catch {
     return null;
   }
