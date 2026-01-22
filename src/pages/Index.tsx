@@ -9,6 +9,7 @@ import { ColleagueManagement, Colleague } from "@/components/ColleagueManagement
 import { UserManagement } from "@/components/UserManagement";
 import { ActivityLog } from "@/components/ActivityLog";
 import { CollectionManagement } from "@/components/CollectionManagement";
+import { CollectionDetailView } from "@/components/CollectionDetailView";
 import { TrashView } from "@/components/TrashView";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ const Index = () => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
   // Fetch products from database with their collections - now with pagination
   const fetchProducts = useCallback(async (reset = false) => {
@@ -625,7 +627,16 @@ const Index = () => {
         )}
 
         {currentView === "collections" && (
-          <CollectionManagement />
+          selectedCollectionId ? (
+            <CollectionDetailView 
+              collectionId={selectedCollectionId} 
+              onBack={() => setSelectedCollectionId(null)} 
+            />
+          ) : (
+            <CollectionManagement 
+              onViewCollection={(id) => setSelectedCollectionId(id)} 
+            />
+          )
         )}
 
         {currentView === "trash" && (
