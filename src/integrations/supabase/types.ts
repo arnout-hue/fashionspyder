@@ -351,7 +351,7 @@ export type Database = {
           is_sent: boolean
           name: string
           notes: string | null
-          price: string | null
+          price: number | null
           product_url: string
           sku: string | null
           status: string
@@ -366,7 +366,7 @@ export type Database = {
           is_sent?: boolean
           name: string
           notes?: string | null
-          price?: string | null
+          price?: number | null
           product_url: string
           sku?: string | null
           status?: string
@@ -381,7 +381,7 @@ export type Database = {
           is_sent?: boolean
           name?: string
           notes?: string | null
-          price?: string | null
+          price?: number | null
           product_url?: string
           sku?: string | null
           status?: string

@@ -52,7 +52,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Product, Supplier, ProductWithCollections } from "@/data/mockData";
+import { Product, Supplier, ProductWithCollections, formatPrice } from "@/data/mockData";
 import { Colleague } from "@/components/ColleagueManagement";
 import { AddToCollectionDialog } from "@/components/AddToCollectionDialog";
 import { emailApi } from "@/lib/api/firecrawl";
@@ -194,7 +194,7 @@ export const ProductList = ({
         selectedProducts.map(p => ({
           id: p.id,
           name: p.name,
-          price: p.price,
+          price: p.price !== null && p.price !== undefined ? String(p.price) : undefined,
           image_url: p.image_url,
           product_url: p.product_url,
           competitor: p.competitor,
@@ -482,7 +482,7 @@ export const ProductList = ({
                     {product.name}
                   </h4>
                   <div className="mt-1 flex items-center justify-between">
-                    <span className="font-semibold text-primary">{product.price}</span>
+                    <span className="font-semibold text-primary">{formatPrice(product.price)}</span>
                     {product.sku && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Tag className="h-3 w-3" />
