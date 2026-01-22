@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { ExternalLink, Tag, Calendar, Check, Folder } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ interface ProductGridProps {
   products: ProductWithCollections[];
   selectedIds: Set<string>;
   onToggleSelect: (productId: string) => void;
+  onRangeSelect?: (productIds: string[]) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
 }
@@ -21,7 +23,24 @@ export const ProductGrid = ({
   products,
   selectedIds,
   onToggleSelect,
+  onRangeSelect,
 }: ProductGridProps) => {
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+
+  const handleClick = useCallback((e: React.MouseEvent, productId: string, index: number) => {
+    if (e.shiftKey && lastClickedIndex !== null && onRangeSelect) {
+      // Shift-click: select range
+      const start = Math.min(lastClickedIndex, index);
+      const end = Math.max(lastClickedIndex, index);
+      const rangeIds = products.slice(start, end + 1).map(p => p.id);
+      onRangeSelect(rangeIds);
+    } else {
+      // Normal click: toggle single item
+      onToggleSelect(productId);
+      setLastClickedIndex(index);
+    }
+  }, [lastClickedIndex, products, onToggleSelect, onRangeSelect]);
+
   if (products.length === 0) {
     return (
       <div className="flex h-64 flex-col items-center justify-center text-center">
@@ -43,7 +62,7 @@ export const ProductGrid = ({
               isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent"
             }`}
             style={{ animationDelay: `${index * 30}ms` }}
-            onClick={() => onToggleSelect(product.id)}
+            onClick={(e) => handleClick(e, product.id, index)}
           >
             {/* Selection Checkbox */}
             <div
