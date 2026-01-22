@@ -1,4 +1,6 @@
-// Scheduled crawl - runs all active competitors using the agent scrape endpoint
+// Scheduled crawl - triggers all active competitors using fire-and-forget pattern
+// IMPORTANT: This function returns quickly (~5-10s) by triggering background jobs
+// Each agent-scrape-competitor call returns immediately with a 202 and processes in background
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -13,21 +15,23 @@ interface CompetitorConfig {
   is_active: boolean;
 }
 
-interface AgentScrapeResult {
-  success: boolean;
-  productsAdded?: number;
-  productsSkipped?: number;
-  error?: string;
+interface TriggerResult {
+  competitor: string;
+  competitorId: string;
+  jobStarted: boolean;
   jobId?: string;
+  error?: string;
 }
 
-async function scrapeCompetitorWithAgent(
+// Fire-and-forget: triggers the agent scrape and returns immediately
+// The agent-scrape-competitor function returns 202 and processes in background
+async function triggerAgentScrape(
   competitor: CompetitorConfig,
   supabaseUrl: string,
   supabaseServiceKey: string,
   limit: number = 25
-): Promise<AgentScrapeResult> {
-  console.log(`Starting agent scrape for ${competitor.name}`);
+): Promise<TriggerResult> {
+  console.log(`Triggering agent scrape for ${competitor.name}`);
 
   try {
     const agentUrl = `${supabaseUrl}/functions/v1/agent-scrape-competitor`;
@@ -39,41 +43,40 @@ async function scrapeCompetitorWithAgent(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        competitor: competitor.name, 
+        competitorId: competitor.id,
         limit 
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Agent scrape failed for ${competitor.name}:`, response.status, errorText);
+      console.error(`Failed to trigger scrape for ${competitor.name}:`, response.status, errorText);
       return { 
-        success: false, 
+        competitor: competitor.name,
+        competitorId: competitor.id,
+        jobStarted: false, 
         error: `HTTP ${response.status}: ${errorText.substring(0, 200)}` 
       };
     }
 
     const result = await response.json();
     
-    if (!result.success) {
-      return { 
-        success: false, 
-        error: result.error || 'Unknown agent error' 
-      };
-    }
-
-    console.log(`Agent scrape completed for ${competitor.name}: ${result.productsAdded || 0} products added`);
+    // agent-scrape-competitor returns { success: true, jobId: ... } immediately
+    console.log(`Job triggered for ${competitor.name}: jobId=${result.jobId}`);
     
     return {
-      success: true,
-      productsAdded: result.productsAdded || 0,
-      productsSkipped: result.productsSkipped || 0,
+      competitor: competitor.name,
+      competitorId: competitor.id,
+      jobStarted: result.success !== false,
       jobId: result.jobId,
+      error: result.error,
     };
   } catch (error) {
-    console.error(`Error in agent scrape for ${competitor.name}:`, error);
+    console.error(`Error triggering scrape for ${competitor.name}:`, error);
     return { 
-      success: false, 
+      competitor: competitor.name,
+      competitorId: competitor.id,
+      jobStarted: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 
     };
   }
@@ -84,7 +87,8 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log('=== Scheduled Crawl Started (Agent Mode) ===');
+  const startTime = Date.now();
+  console.log('=== Scheduled Crawl Started (Fire-and-Forget Mode) ===');
   console.log('Time:', new Date().toISOString());
 
   try {
@@ -120,7 +124,10 @@ Deno.serve(async (req) => {
       .single();
 
     const maxProductsPerCompetitor = scheduleData?.max_products_per_competitor || 25;
-    const delayBetweenCompetitorsMs = (scheduleData?.delay_between_competitors_seconds || 180) * 1000;
+    
+    // Rate limit buffer: small delay between API calls to avoid overwhelming Firecrawl
+    // This is NOT the old 180s delay - it's just 500ms to space out job triggers
+    const rateLimitBufferMs = 500;
 
     // Fetch all active competitors
     const { data: competitors, error: fetchError } = await supabase
@@ -137,47 +144,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Found ${competitors.length} active competitors to crawl`);
-    console.log(`Settings: ${maxProductsPerCompetitor} products/competitor, ${delayBetweenCompetitorsMs/1000}s delay`);
+    if (competitors.length === 0) {
+      console.log('No active competitors found');
+      return new Response(
+        JSON.stringify({ success: true, message: 'No active competitors to crawl', results: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    const results: { 
-      competitor: string; 
-      success: boolean; 
-      productsAdded: number; 
-      error?: string 
-    }[] = [];
+    console.log(`Found ${competitors.length} active competitors to trigger`);
+    console.log(`Settings: ${maxProductsPerCompetitor} products/competitor, ${rateLimitBufferMs}ms rate limit buffer`);
 
+    const results: TriggerResult[] = [];
+
+    // Fire-and-forget loop: trigger all jobs rapidly
+    // Each agent-scrape-competitor returns 202 immediately and processes in background
     for (let i = 0; i < competitors.length; i++) {
       const competitor = competitors[i];
-      console.log(`\n[${i + 1}/${competitors.length}] Crawling ${competitor.name}...`);
+      console.log(`[${i + 1}/${competitors.length}] Triggering ${competitor.name}...`);
       
-      const result = await scrapeCompetitorWithAgent(
+      const result = await triggerAgentScrape(
         competitor,
         supabaseUrl,
         supabaseServiceKey,
         maxProductsPerCompetitor
       );
 
-      // Record in crawl_history
-      await supabase.from('crawl_history').insert({
-        competitor_id: competitor.id,
-        status: result.success ? 'success' : 'error',
-        new_products_scraped: result.productsAdded || 0,
-        skipped_count: result.productsSkipped || 0,
-        error_message: result.error || null,
-      });
+      results.push(result);
 
-      results.push({
-        competitor: competitor.name,
-        success: result.success,
-        productsAdded: result.productsAdded || 0,
-        error: result.error,
-      });
-
-      // Wait between competitors (except for the last one)
+      // Small delay between triggers to avoid rate limiting (500ms, not 180s!)
       if (i < competitors.length - 1) {
-        console.log(`Waiting ${delayBetweenCompetitorsMs/1000}s before next competitor...`);
-        await new Promise((resolve) => setTimeout(resolve, delayBetweenCompetitorsMs));
+        await new Promise((resolve) => setTimeout(resolve, rateLimitBufferMs));
       }
     }
 
@@ -189,20 +186,25 @@ Deno.serve(async (req) => {
         .eq('id', scheduleData.id);
     }
 
-    const totalProducts = results.reduce((sum, r) => sum + r.productsAdded, 0);
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter(r => r.jobStarted).length;
+    const failCount = results.filter(r => !r.jobStarted).length;
+    const elapsedMs = Date.now() - startTime;
 
-    console.log('\n=== Scheduled Crawl Complete (Agent Mode) ===');
-    console.log(`Total: ${successCount}/${competitors.length} competitors successful`);
-    console.log(`Products added: ${totalProducts}`);
+    console.log('\n=== Scheduled Crawl Complete (Fire-and-Forget Mode) ===');
+    console.log(`Jobs triggered: ${successCount}/${competitors.length} successful`);
+    console.log(`Failed to trigger: ${failCount}`);
+    console.log(`Total time: ${elapsedMs}ms`);
+    console.log('Note: Actual scraping continues in background via EdgeRuntime.waitUntil()');
 
     return new Response(
       JSON.stringify({
         success: true,
+        message: `Triggered ${successCount} crawl jobs in ${elapsedMs}ms. Processing continues in background.`,
         data: {
-          competitorsProcessed: competitors.length,
+          competitorsTriggered: competitors.length,
           successCount,
-          totalProducts,
+          failCount,
+          elapsedMs,
           results,
         },
       }),
