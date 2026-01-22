@@ -67,6 +67,14 @@ export const DiscoverView = ({
     });
   };
 
+  const handleRangeSelect = (productIds: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      productIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
   const handleSelectAll = () => {
     setSelectedIds(new Set(products.map((p) => p.id)));
   };
@@ -254,6 +262,7 @@ export const DiscoverView = ({
           products={products}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
+          onRangeSelect={handleRangeSelect}
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
         />
