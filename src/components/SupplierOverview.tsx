@@ -67,7 +67,7 @@ export const SupplierOverview = ({
         supplierProducts.map(p => ({
           id: p.id,
           name: p.name,
-          price: p.price,
+          price: p.price !== null && p.price !== undefined ? String(p.price) : undefined,
           image_url: p.image_url,
           product_url: p.product_url,
           competitor: p.competitor,

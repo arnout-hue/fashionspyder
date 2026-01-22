@@ -12,6 +12,8 @@ import { CollectionManagement } from "@/components/CollectionManagement";
 import { TrashView } from "@/components/TrashView";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import {
   Product,
   Supplier,
@@ -21,6 +23,8 @@ import {
 
 type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections" | "trash";
 
+const PAGE_SIZE = 50;
+
 const Index = () => {
   const [currentView, setCurrentView] = useState<View>("swipe");
   const [selectedCompetitor, setSelectedCompetitor] = useState("All");
@@ -29,67 +33,110 @@ const Index = () => {
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
   const [competitors, setCompetitors] = useState<string[]>(["All"]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
-  // Fetch products from database with their collections
-  const fetchProducts = useCallback(async () => {
-    // Fetch products
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (productsError) {
-      console.error('Error fetching products:', productsError);
-      toast.error('Failed to load products');
-      setIsLoading(false);
-      return;
+  // Fetch products from database with their collections - now with pagination
+  const fetchProducts = useCallback(async (reset = false) => {
+    const isReset = reset;
+    if (isReset) {
+      setIsLoading(true);
+      setPage(0);
+    } else {
+      setIsLoadingMore(true);
     }
     
-    // Fetch product collections with collection details
-    const { data: productCollectionsData } = await supabase
-      .from('product_collections')
-      .select('product_id, collection_id, collections(id, name, color)');
-    
-    // Build a map of product_id -> collections
-    const collectionsMap = new Map<string, ProductCollection[]>();
-    if (productCollectionsData) {
-      for (const pc of productCollectionsData) {
-        if (pc.product_id && pc.collections) {
-          const collection = pc.collections as unknown as { id: string; name: string; color: string };
-          if (!collectionsMap.has(pc.product_id)) {
-            collectionsMap.set(pc.product_id, []);
+    const currentPage = isReset ? 0 : page;
+    const from = currentPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    try {
+      // Build query with server-side filtering
+      let query = supabase
+        .from('products')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (selectedCompetitor !== "All") {
+        query = query.eq('competitor', selectedCompetitor);
+      }
+
+      const { data: productsData, count, error: productsError } = await query;
+      
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+        toast.error('Failed to load products');
+        return;
+      }
+
+      // Fetch product collections for these products only
+      const productIds = productsData?.map(p => p.id) || [];
+      let collectionsMap = new Map<string, ProductCollection[]>();
+      
+      if (productIds.length > 0) {
+        const { data: productCollectionsData } = await supabase
+          .from('product_collections')
+          .select('product_id, collection_id, collections(id, name, color)')
+          .in('product_id', productIds);
+        
+        if (productCollectionsData) {
+          for (const pc of productCollectionsData) {
+            if (pc.product_id && pc.collections) {
+              const collection = pc.collections as unknown as { id: string; name: string; color: string };
+              if (!collectionsMap.has(pc.product_id)) {
+                collectionsMap.set(pc.product_id, []);
+              }
+              collectionsMap.get(pc.product_id)!.push({
+                id: collection.id,
+                name: collection.name,
+                color: collection.color || '#6366f1',
+              });
+            }
           }
-          collectionsMap.get(pc.product_id)!.push({
-            id: collection.id,
-            name: collection.name,
-            color: collection.color || '#6366f1',
-          });
         }
       }
+      
+      if (productsData) {
+        // Map database fields to ProductWithCollections interface
+        const mappedProducts: ProductWithCollections[] = productsData.map(p => ({
+          id: p.id,
+          name: p.name,
+          competitor: p.competitor,
+          price: p.price || undefined,
+          image_url: p.image_url || undefined,
+          product_url: p.product_url,
+          sku: p.sku || undefined,
+          status: p.status as "pending" | "positive" | "negative" | "requested",
+          supplier_id: p.supplier_id || undefined,
+          notes: p.notes || undefined,
+          is_sent: p.is_sent,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+          collections: collectionsMap.get(p.id) || [],
+        }));
+        
+        if (isReset) {
+          setProducts(mappedProducts);
+          setPage(1);
+        } else {
+          setProducts(prev => [...prev, ...mappedProducts]);
+          setPage(p => p + 1);
+        }
+        
+        setHasMore(productsData.length === PAGE_SIZE);
+        setTotalCount(count || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Failed to load products');
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-    
-    if (productsData) {
-      // Map database fields to ProductWithCollections interface
-      const mappedProducts: ProductWithCollections[] = productsData.map(p => ({
-        id: p.id,
-        name: p.name,
-        competitor: p.competitor,
-        price: p.price || undefined,
-        image_url: p.image_url || undefined,
-        product_url: p.product_url,
-        sku: p.sku || undefined,
-        status: p.status as "pending" | "positive" | "negative" | "requested",
-        supplier_id: p.supplier_id || undefined,
-        notes: p.notes || undefined,
-        is_sent: p.is_sent,
-        created_at: p.created_at,
-        updated_at: p.updated_at,
-        collections: collectionsMap.get(p.id) || [],
-      }));
-      setProducts(mappedProducts);
-    }
-    setIsLoading(false);
-  }, []);
+  }, [selectedCompetitor, page]);
 
   // Fetch suppliers from database
   const fetchSuppliers = useCallback(async () => {
@@ -125,7 +172,12 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch competitors from database
+  // Reset and refetch when competitor changes
+  useEffect(() => {
+    fetchProducts(true);
+  }, [selectedCompetitor]);
+
+  // Initial load of competitors, suppliers, colleagues
   useEffect(() => {
     const fetchCompetitors = async () => {
       const { data } = await supabase
@@ -139,22 +191,15 @@ const Index = () => {
       }
     };
     fetchCompetitors();
-    fetchProducts();
     fetchSuppliers();
     fetchColleagues();
-  }, [fetchProducts, fetchSuppliers, fetchColleagues]);
+  }, [fetchSuppliers, fetchColleagues]);
 
-  // Filter products by competitor
-  const filteredProducts = useMemo(() => {
-    if (selectedCompetitor === "All") return products;
-    return products.filter((p) => p.competitor === selectedCompetitor);
-  }, [products, selectedCompetitor]);
-
-  // Categorize products
-  const pendingProducts = filteredProducts.filter((p) => p.status === "pending");
-  const positiveProducts = filteredProducts.filter((p) => p.status === "positive");
-  const negativeProducts = filteredProducts.filter((p) => p.status === "negative");
-  const trashedProducts = filteredProducts.filter((p) => p.status === "trash");
+  // Filter products by status (already filtered by competitor in query)
+  const pendingProducts = useMemo(() => products.filter((p) => p.status === "pending"), [products]);
+  const positiveProducts = useMemo(() => products.filter((p) => p.status === "positive"), [products]);
+  const negativeProducts = useMemo(() => products.filter((p) => p.status === "negative"), [products]);
+  const trashedProducts = useMemo(() => products.filter((p) => p.status === "trash"), [products]);
 
   // Handlers - update database and local state
   const handleSwipeRight = async (product: ProductWithCollections) => {
@@ -464,6 +509,7 @@ const Index = () => {
               <h1 className="font-display text-3xl font-semibold">Positive List</h1>
               <p className="mt-2 text-muted-foreground">
                 Products you've liked — assign suppliers and add notes
+                {totalCount > 0 && ` (${products.length} of ${totalCount} loaded)`}
               </p>
             </div>
             <ProductList
@@ -477,6 +523,25 @@ const Index = () => {
               onBulkAssignSupplier={handleBulkAssignSupplier}
               onClearToTrash={handleClearToTrash}
             />
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => fetchProducts(false)}
+                  disabled={isLoadingMore}
+                  className="gap-2"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Products'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -486,6 +551,7 @@ const Index = () => {
               <h1 className="font-display text-3xl font-semibold">Negative List</h1>
               <p className="mt-2 text-muted-foreground">
                 Products you've skipped — move back if you change your mind
+                {totalCount > 0 && ` (${products.length} of ${totalCount} loaded)`}
               </p>
             </div>
             <ProductList
@@ -498,6 +564,25 @@ const Index = () => {
               onBulkAssignSupplier={handleBulkAssignSupplier}
               onClearToTrash={handleClearToTrash}
             />
+            {hasMore && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => fetchProducts(false)}
+                  disabled={isLoadingMore}
+                  className="gap-2"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Products'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

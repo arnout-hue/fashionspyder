@@ -66,7 +66,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-1",
     name: "Oversized Linen Blazer",
-    price: "€89.99",
+    price: 89.99,
     image_url: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=600&fit=crop",
     product_url: "https://www.loavies.com/nl/product-1",
     sku: "LOA-BLZ-001",
@@ -81,7 +81,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-2",
     name: "Ribbed Crop Top",
-    price: "€24.95",
+    price: 24.95,
     image_url: "https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=400&h=600&fit=crop",
     product_url: "https://www.my-jewellery.com/product-2",
     sku: "MYJ-TOP-042",
@@ -96,7 +96,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-3",
     name: "High-Waist Wide Leg Trousers",
-    price: "€69.00",
+    price: 69.00,
     image_url: "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&h=600&fit=crop",
     product_url: "https://www.tessv.nl/product-3",
     sku: "TSV-TRS-118",
@@ -111,7 +111,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-4",
     name: "Satin Midi Skirt",
-    price: "€54.99",
+    price: 54.99,
     image_url: "https://images.unsplash.com/photo-1583496661160-fb5886a0uj9a?w=400&h=600&fit=crop",
     product_url: "https://most-wanted.com/product-4",
     sku: "MW-SKT-067",
@@ -126,7 +126,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-5",
     name: "Knit Cardigan Set",
-    price: "€79.95",
+    price: 79.95,
     image_url: "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&h=600&fit=crop",
     product_url: "https://oliviakate.nl/product-5",
     sku: "OK-KNT-203",
@@ -141,7 +141,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-6",
     name: "Printed Maxi Dress",
-    price: "€119.00",
+    price: 119.00,
     image_url: "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=400&h=600&fit=crop",
     product_url: "https://www.loavies.com/nl/product-6",
     sku: "LOA-DRS-089",
@@ -156,7 +156,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-7",
     name: "Structured Shoulder Bag",
-    price: "€45.00",
+    price: 45.00,
     image_url: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=600&fit=crop",
     product_url: "https://www.my-jewellery.com/product-7",
     sku: "MYJ-BAG-156",
@@ -171,7 +171,7 @@ export const mockProducts: Product[] = [
   {
     id: "prod-8",
     name: "Denim Jacket Oversized",
-    price: "€89.95",
+    price: 89.95,
     image_url: "https://images.unsplash.com/photo-1551537482-f2075a1d41f2?w=400&h=600&fit=crop",
     product_url: "https://www.tessv.nl/product-8",
     sku: "TSV-DNM-044",
@@ -184,6 +184,12 @@ export const mockProducts: Product[] = [
     updated_at: new Date().toISOString(),
   },
 ];
+
+// Price formatting utility
+export const formatPrice = (price: number | null | undefined): string => {
+  if (price === null || price === undefined) return '';
+  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(price);
+};
 
 // Legacy export for backwards compatibility - now fetched from database
 export const competitors = ["All"];

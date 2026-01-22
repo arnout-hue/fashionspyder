@@ -42,7 +42,7 @@ export function exportToCSV(products: ExportProduct[], filename: string = 'produ
 
   const rows = products.map((p) => [
     escapeCSV(p.name),
-    escapeCSV(p.price),
+    escapeCSV(p.price !== null && p.price !== undefined ? String(p.price) : ''),
     escapeCSV(p.competitor),
     escapeCSV(p.status),
     escapeCSV(p.supplier_name),
