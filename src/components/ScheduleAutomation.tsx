@@ -185,79 +185,63 @@ export const ScheduleAutomation = () => {
   };
 
   const handleRunNow = async () => {
+    if (!schedule) return;
+    
     setRunningNow(true);
-
+    toast({
+      title: 'Starting bulk crawl...',
+      description: 'Triggering crawl jobs for all active competitors',
+    });
+    
     try {
-      // Fetch all active competitors
-      const { data: competitors } = await supabase
-        .from('competitors')
-        .select('id, name')
-        .eq('is_active', true);
+      // Use the bulk-crawl edge function instead of browser-side loop
+      // This delegates orchestration to the server and avoids timeout issues
+      const { data, error } = await supabase.functions.invoke('bulk-crawl', {
+        body: { 
+          limit: schedule.max_products_per_competitor || 25 
+        }
+      });
 
-      if (!competitors || competitors.length === 0) {
-        toast({
-          title: 'No competitors',
-          description: 'No active competitors to crawl',
-          variant: 'destructive',
-        });
-        setRunningNow(false);
-        return;
+      if (error) {
+        throw new Error(error.message || 'Failed to invoke bulk-crawl');
       }
 
-      await logActivity(
-        'Started manual bulk crawl',
+      const successCount = data?.successCount || 0;
+      const failCount = data?.failCount || 0;
+      const totalCompetitors = data?.results?.length || 0;
+
+      // Update last_run_at
+      await supabase
+        .from('crawl_schedule')
+        .update({ last_run_at: new Date().toISOString() })
+        .eq('id', schedule.id);
+
+      toast({
+        title: 'Crawl jobs triggered',
+        description: `Started ${successCount} jobs for ${totalCompetitors} competitors. Check history for progress.`,
+      });
+
+      logActivity(
+        'Manual bulk crawl triggered',
         'crawl',
         undefined,
         undefined,
         undefined,
-        { competitor_count: competitors.length }
+        { successCount, failCount, totalCompetitors }
       );
 
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const competitor of competitors) {
-        try {
-          const response = await firecrawlApi.agentScrapeCompetitor(competitor.id, maxProducts);
-          if (response.success) {
-            successCount++;
-          } else {
-            errorCount++;
-          }
-        } catch {
-          errorCount++;
-        }
-
-        // Wait between competitors
-        if (competitor !== competitors[competitors.length - 1]) {
-          await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
-        }
-      }
-
-      // Update last_run_at
-      if (schedule) {
-        await supabase
-          .from('crawl_schedule')
-          .update({ last_run_at: new Date().toISOString() })
-          .eq('id', schedule.id);
-      }
-
-      toast({
-        title: 'Crawl complete',
-        description: `${successCount} succeeded, ${errorCount} failed`,
-      });
-
-      fetchSchedule();
-      fetchHistory();
+      await fetchSchedule();
+      await fetchHistory();
     } catch (error) {
+      console.error('Error running bulk crawl:', error);
       toast({
         title: 'Error',
-        description: 'Failed to run crawl',
+        description: error instanceof Error ? error.message : 'Failed to start bulk crawl',
         variant: 'destructive',
       });
+    } finally {
+      setRunningNow(false);
     }
-
-    setRunningNow(false);
   };
 
   const getStatusBadge = (status: string) => {
@@ -452,19 +436,19 @@ export const ScheduleAutomation = () => {
 
               <div>
                 <div className="flex items-center justify-between">
-                  <Label>Delay Between Competitors</Label>
+                  <Label>Rate Limit Buffer</Label>
                   <span className="text-sm font-medium">{delaySeconds}s</span>
                 </div>
                 <Slider
                   value={[delaySeconds]}
                   onValueChange={([value]) => setDelaySeconds(value)}
-                  min={30}
-                  max={600}
-                  step={30}
+                  min={1}
+                  max={10}
+                  step={1}
                   className="mt-2"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Wait time between crawling each competitor (prevents rate limiting)
+                  Delay between triggering jobs (for API rate limiting). Jobs run in parallel.
                 </p>
               </div>
             </div>
