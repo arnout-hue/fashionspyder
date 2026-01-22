@@ -4,10 +4,22 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import Index from "./pages/Index";
+import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
 import PendingApproval from "./pages/PendingApproval";
 import NotFound from "./pages/NotFound";
+import DiscoverPage from "./pages/DiscoverPage";
+import PositiveListPage from "./pages/PositiveListPage";
+import NegativeListPage from "./pages/NegativeListPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import TrashPage from "./pages/TrashPage";
+import CollectionsPage from "./pages/CollectionsPage";
+import CollectionDetailPage from "./pages/CollectionDetailPage";
+import { CrawlManagement } from "./components/CrawlManagement";
+import ManageSuppliersPage from "./pages/ManageSuppliersPage";
+import ManageColleaguesPage from "./pages/ManageColleaguesPage";
+import { UserManagement } from "./components/UserManagement";
+import { ActivityLog } from "./components/ActivityLog";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +39,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Wait for profile to load before checking approval
   if (profile === null && user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -36,7 +47,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Check if user is approved
   if (!isApproved) {
     return <Navigate to="/pending" replace />;
   }
@@ -44,7 +54,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Pending route wrapper - shows pending page only for unapproved users
+// Pending route wrapper
 function PendingRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isApproved, profile } = useAuth();
   
@@ -60,7 +70,6 @@ function PendingRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Wait for profile to load
   if (profile === null && user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -69,7 +78,6 @@ function PendingRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If approved, redirect to main app
   if (isApproved) {
     return <Navigate to="/" replace />;
   }
@@ -80,17 +88,25 @@ function PendingRoute({ children }: { children: React.ReactNode }) {
 const AppRoutes = () => (
   <Routes>
     <Route path="/auth" element={<Auth />} />
-    <Route path="/pending" element={
-      <PendingRoute>
-        <PendingApproval />
-      </PendingRoute>
-    } />
-    <Route path="/" element={
-      <ProtectedRoute>
-        <Index />
-      </ProtectedRoute>
-    } />
-    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+    <Route path="/pending" element={<PendingRoute><PendingApproval /></PendingRoute>} />
+    
+    {/* Protected routes with AppLayout */}
+    <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+      <Route index element={<Navigate to="/discover" replace />} />
+      <Route path="discover" element={<DiscoverPage />} />
+      <Route path="positive" element={<PositiveListPage />} />
+      <Route path="negative" element={<NegativeListPage />} />
+      <Route path="suppliers" element={<SuppliersPage />} />
+      <Route path="trash" element={<TrashPage />} />
+      <Route path="collections" element={<CollectionsPage />} />
+      <Route path="collections/:id" element={<CollectionDetailPage />} />
+      <Route path="crawl" element={<CrawlManagement />} />
+      <Route path="manage-suppliers" element={<ManageSuppliersPage />} />
+      <Route path="colleagues" element={<ManageColleaguesPage />} />
+      <Route path="users" element={<UserManagement />} />
+      <Route path="activity" element={<ActivityLog />} />
+    </Route>
+    
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
