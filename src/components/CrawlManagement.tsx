@@ -14,6 +14,7 @@ import { firecrawlApi } from '@/lib/api/firecrawl';
 import { supabase } from '@/integrations/supabase/client';
 import { Globe, Loader2, Play, ExternalLink, Plus, Pencil, Trash2, Image as ImageIcon, Settings2, Zap, Save, BarChart3, Clock, Bot, ScanSearch, MoreVertical } from 'lucide-react';
 import { ScheduleAutomation } from '@/components/ScheduleAutomation';
+import { CrawlLogs } from '@/components/CrawlLogs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -781,6 +782,10 @@ export const CrawlManagement = () => {
             <Globe className="h-4 w-4" />
             Competitors
           </TabsTrigger>
+          <TabsTrigger value="logs" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Logs
+          </TabsTrigger>
           <TabsTrigger value="automation" className="gap-2">
             <Clock className="h-4 w-4" />
             Automation
@@ -1115,6 +1120,10 @@ export const CrawlManagement = () => {
           </CardContent>
         </Card>
       </TabsContent>
+
+        <TabsContent value="logs">
+          <CrawlLogs />
+        </TabsContent>
 
         <TabsContent value="automation">
           <ScheduleAutomation />
