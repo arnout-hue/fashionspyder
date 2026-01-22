@@ -1,4 +1,5 @@
 import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen, Trash2 } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,11 +19,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
-type View = "swipe" | "positive" | "negative" | "suppliers" | "crawl" | "supplier-management" | "colleague-management" | "user-management" | "activity-log" | "collections" | "trash";
-
 interface NavigationProps {
-  currentView: View;
-  onViewChange: (view: View) => void;
   positiveCount: number;
   negativeCount: number;
   pendingCount: number;
@@ -33,8 +30,6 @@ interface NavigationProps {
 }
 
 export const Navigation = ({
-  currentView,
-  onViewChange,
   positiveCount,
   negativeCount,
   pendingCount,
@@ -44,67 +39,68 @@ export const Navigation = ({
   competitors,
 }: NavigationProps) => {
   const { signOut, isAdmin } = useAuth();
+  const location = useLocation();
   
-  const mainNavItems: { id: View; label: string; icon: React.ReactNode; count?: number }[] = [
+  const mainNavItems: { path: string; label: string; icon: React.ReactNode; count?: number }[] = [
     {
-      id: "swipe",
+      path: "/discover",
       label: "Discover",
       icon: <Layers className="h-5 w-5" />,
       count: pendingCount,
     },
     {
-      id: "positive",
+      path: "/positive",
       label: "Positive",
       icon: <ThumbsUp className="h-5 w-5" />,
       count: positiveCount,
     },
     {
-      id: "negative",
+      path: "/negative",
       label: "Negative",
       icon: <ThumbsDown className="h-5 w-5" />,
       count: negativeCount,
     },
     {
-      id: "suppliers",
+      path: "/suppliers",
       label: "Suppliers",
       icon: <Package className="h-5 w-5" />,
     },
   ];
 
-  const settingsItems: { id: View; label: string; icon: React.ReactNode; adminOnly?: boolean; count?: number }[] = [
+  const settingsItems: { path: string; label: string; icon: React.ReactNode; adminOnly?: boolean; count?: number }[] = [
     {
-      id: "crawl",
+      path: "/crawl",
       label: "Crawl Competitors",
       icon: <Globe className="h-4 w-4" />,
     },
     {
-      id: "supplier-management",
+      path: "/manage-suppliers",
       label: "Manage Suppliers",
       icon: <Users className="h-4 w-4" />,
     },
     {
-      id: "colleague-management",
+      path: "/colleagues",
       label: "Manage Colleagues",
       icon: <UserPlus className="h-4 w-4" />,
     },
     {
-      id: "collections",
+      path: "/collections",
       label: "Collections",
       icon: <FolderOpen className="h-4 w-4" />,
     },
     {
-      id: "trash",
+      path: "/trash",
       label: "Trash",
       icon: <Trash2 className="h-4 w-4" />,
       count: trashCount,
     },
     {
-      id: "activity-log",
+      path: "/activity",
       label: "Activity Log",
       icon: <Activity className="h-4 w-4" />,
     },
     {
-      id: "user-management",
+      path: "/users",
       label: "Manage Users",
       icon: <ShieldCheck className="h-4 w-4" />,
       adminOnly: true,
@@ -112,7 +108,10 @@ export const Navigation = ({
   ];
 
   const filteredSettingsItems = settingsItems.filter(item => !item.adminOnly || isAdmin);
-  const isSettingsView = currentView === "crawl" || currentView === "supplier-management" || currentView === "colleague-management" || currentView === "user-management" || currentView === "activity-log" || currentView === "collections" || currentView === "trash";
+  const settingsPaths = settingsItems.map(i => i.path);
+  const isSettingsView = settingsPaths.some(path => location.pathname.startsWith(path));
+
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
 
   return (
     <>
@@ -120,30 +119,32 @@ export const Navigation = ({
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
         <div className="container flex h-16 items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <Link to="/discover" className="flex items-center gap-2">
             <img src={logo} alt="FashionSpyder" className="h-10 w-auto" />
-          </div>
+          </Link>
 
           {/* Desktop Nav Items */}
           <nav className="hidden items-center gap-1 md:flex">
             {mainNavItems.map((item) => (
               <Button
-                key={item.id}
-                variant={currentView === item.id ? "secondary" : "ghost"}
+                key={item.path}
+                variant={isActive(item.path) ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => onViewChange(item.id)}
+                asChild
                 className="gap-2"
               >
-                {item.icon}
-                {item.label}
-                {item.count !== undefined && item.count > 0 && (
-                  <Badge
-                    variant={currentView === item.id ? "default" : "secondary"}
-                    className="ml-1 h-5 min-w-5 px-1.5"
-                  >
-                    {item.count}
-                  </Badge>
-                )}
+                <Link to={item.path}>
+                  {item.icon}
+                  {item.label}
+                  {item.count !== undefined && item.count > 0 && (
+                    <Badge
+                      variant={isActive(item.path) ? "default" : "secondary"}
+                      className="ml-1 h-5 min-w-5 px-1.5"
+                    >
+                      {item.count}
+                    </Badge>
+                  )}
+                </Link>
               </Button>
             ))}
             
@@ -162,22 +163,21 @@ export const Navigation = ({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
               {filteredSettingsItems.map((item, index) => (
-                  <div key={item.id}>
+                  <div key={item.path}>
                     {item.adminOnly && index > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuItem
-                      onClick={() => onViewChange(item.id)}
-                      className="gap-2"
-                    >
-                      {item.icon}
-                      {item.label}
-                      {item.count !== undefined && item.count > 0 && (
-                        <Badge variant="secondary" className="ml-auto text-xs">
-                          {item.count}
-                        </Badge>
-                      )}
-                      {item.adminOnly && (
-                        <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
-                      )}
+                    <DropdownMenuItem asChild className="gap-2">
+                      <Link to={item.path}>
+                        {item.icon}
+                        {item.label}
+                        {item.count !== undefined && item.count > 0 && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {item.count}
+                          </Badge>
+                        )}
+                        {item.adminOnly && (
+                          <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
+                        )}
+                      </Link>
                     </DropdownMenuItem>
                   </div>
                 ))}
@@ -236,14 +236,13 @@ export const Navigation = ({
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-lg md:hidden safe-area-inset-bottom">
         <div className="flex h-16">
           {mainNavItems.map((item) => {
-            const isActive = currentView === item.id;
+            const active = isActive(item.path);
             return (
-              <Button
-                key={item.id}
-                variant="ghost"
-                onClick={() => onViewChange(item.id)}
-                className={`flex-1 flex-col gap-1 rounded-none h-full px-1 ${
-                  isActive 
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 h-full px-1 ${
+                  active 
                     ? "bg-primary/10 text-primary" 
                     : "text-muted-foreground"
                 }`}
@@ -256,19 +255,18 @@ export const Navigation = ({
                     </span>
                   )}
                 </div>
-                <span className={`text-[11px] font-medium ${isActive ? "text-primary" : ""}`}>
+                <span className={`text-[11px] font-medium ${active ? "text-primary" : ""}`}>
                   {item.label}
                 </span>
-              </Button>
+              </Link>
             );
           })}
           
           {/* Settings in bottom nav */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className={`flex-1 flex-col gap-1 rounded-none h-full px-1 ${
+              <button
+                className={`flex-1 flex flex-col items-center justify-center gap-1 h-full px-1 ${
                   isSettingsView 
                     ? "bg-primary/10 text-primary" 
                     : "text-muted-foreground"
@@ -278,26 +276,25 @@ export const Navigation = ({
                 <span className={`text-[11px] font-medium ${isSettingsView ? "text-primary" : ""}`}>
                   Settings
                 </span>
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="mb-2">
               {filteredSettingsItems.map((item, index) => (
-                <div key={item.id}>
+                <div key={item.path}>
                   {item.adminOnly && index > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem
-                    onClick={() => onViewChange(item.id)}
-                    className="gap-2"
-                  >
-                    {item.icon}
-                    {item.label}
-                    {item.count !== undefined && item.count > 0 && (
-                      <Badge variant="secondary" className="ml-auto text-xs">
-                        {item.count}
-                      </Badge>
-                    )}
-                    {item.adminOnly && (
-                      <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
-                    )}
+                  <DropdownMenuItem asChild className="gap-2">
+                    <Link to={item.path}>
+                      {item.icon}
+                      {item.label}
+                      {item.count !== undefined && item.count > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                          {item.count}
+                        </Badge>
+                      )}
+                      {item.adminOnly && (
+                        <Badge variant="outline" className="ml-auto text-xs">Admin</Badge>
+                      )}
+                    </Link>
                   </DropdownMenuItem>
                 </div>
               ))}
