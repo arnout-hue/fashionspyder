@@ -511,7 +511,7 @@ const Index = () => {
               <h1 className="font-display text-3xl font-semibold">Positive List</h1>
               <p className="mt-2 text-muted-foreground">
                 Products you've liked — assign suppliers and add notes
-                {totalCount > 0 && ` (${products.length} of ${totalCount} loaded)`}
+                {positiveProducts.length > 0 && ` (${positiveProducts.length} products)`}
               </p>
             </div>
             <ProductList
@@ -553,7 +553,7 @@ const Index = () => {
               <h1 className="font-display text-3xl font-semibold">Negative List</h1>
               <p className="mt-2 text-muted-foreground">
                 Products you've skipped — move back if you change your mind
-                {totalCount > 0 && ` (${products.length} of ${totalCount} loaded)`}
+                {negativeProducts.length > 0 && ` (${negativeProducts.length} products)`}
               </p>
             </div>
             <ProductList
