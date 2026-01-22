@@ -125,7 +125,7 @@ export const Navigation = ({
         <div className="container flex h-16 items-center justify-between">
           {/* Logo */}
           <Link to="/discover" className="flex items-center gap-2">
-            <img src={logo} alt="FashionSpyder" className="h-10 w-auto" />
+            <img src={logo} alt="FashionSpyder" className="h-10 w-auto dark:invert" />
           </Link>
 
           {/* Desktop Nav Items */}
