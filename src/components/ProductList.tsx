@@ -418,7 +418,7 @@ export const ProductList = ({
       </div>
 
       {/* Product Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 select-none sm:grid-cols-2 lg:grid-cols-3">
         {products.map((product, index) => {
           const isSelected = selectedIds.has(product.id);
           const crawlDate = new Date(product.created_at);
