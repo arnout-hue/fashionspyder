@@ -54,6 +54,7 @@ export const DiscoverView = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearMode, setClearMode] = useState<"all" | "selected">("all");
 
   const handleToggleSelect = (productId: string) => {
     setSelectedIds((prev) => {
@@ -102,9 +103,19 @@ export const DiscoverView = ({
     }
   };
 
-  const handleClearAll = () => {
-    onClearToTrash(products.map(p => p.id));
+  const handleClearConfirm = () => {
+    if (clearMode === "all") {
+      onClearToTrash(products.map(p => p.id));
+    } else {
+      onClearToTrash(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    }
     setClearDialogOpen(false);
+  };
+
+  const openClearDialog = (mode: "all" | "selected") => {
+    setClearMode(mode);
+    setClearDialogOpen(true);
   };
 
   return (
@@ -122,15 +133,28 @@ export const DiscoverView = ({
 
         <div className="flex items-center gap-3">
           {products.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
-              onClick={() => setClearDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Clear All</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-popover">
+                <DropdownMenuItem 
+                  onClick={() => openClearDialog("selected")}
+                  disabled={selectedIds.size === 0}
+                >
+                  Clear Selected ({selectedIds.size})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openClearDialog("all")}>
+                  Clear All ({products.length})
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <ToggleGroup
             type="single"
@@ -275,23 +299,26 @@ export const DiscoverView = ({
         onSuccess={() => setSelectedIds(new Set())}
       />
 
-      {/* Clear All Confirmation Dialog */}
+      {/* Clear Confirmation Dialog */}
       <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear all pending items?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {clearMode === "all" ? "Clear all pending items?" : "Clear selected items?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will move {products.length} item{products.length !== 1 ? "s" : ""} to the trash. 
+              This will move {clearMode === "all" ? products.length : selectedIds.size} item
+              {(clearMode === "all" ? products.length : selectedIds.size) !== 1 ? "s" : ""} to the trash. 
               You can restore them later from Settings → Trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleClearAll}
+              onClick={handleClearConfirm}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Clear All
+              {clearMode === "all" ? "Clear All" : "Clear Selected"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
