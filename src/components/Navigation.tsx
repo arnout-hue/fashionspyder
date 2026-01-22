@@ -1,4 +1,4 @@
-import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen, Trash2 } from "lucide-react";
+import { Layers, ThumbsUp, ThumbsDown, Package, Settings, Filter, LogOut, ChevronDown, Globe, Users, UserPlus, ShieldCheck, Activity, FolderOpen, Trash2, BarChart3 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,11 @@ export const Navigation = ({
   ];
 
   const settingsItems: { path: string; label: string; icon: React.ReactNode; adminOnly?: boolean; count?: number }[] = [
+    {
+      path: "/analytics",
+      label: "Analytics",
+      icon: <BarChart3 className="h-4 w-4" />,
+    },
     {
       path: "/crawl",
       label: "Crawl Competitors",
