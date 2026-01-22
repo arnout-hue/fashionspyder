@@ -20,6 +20,7 @@ import ManageSuppliersPage from "./pages/ManageSuppliersPage";
 import ManageColleaguesPage from "./pages/ManageColleaguesPage";
 import { UserManagement } from "./components/UserManagement";
 import { ActivityLog } from "./components/ActivityLog";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,7 @@ const AppRoutes = () => (
       <Route path="colleagues" element={<ManageColleaguesPage />} />
       <Route path="users" element={<UserManagement />} />
       <Route path="activity" element={<ActivityLog />} />
+      <Route path="analytics" element={<AnalyticsPage />} />
     </Route>
     
     <Route path="*" element={<NotFound />} />

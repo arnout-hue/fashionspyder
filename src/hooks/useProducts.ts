@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ProductWithCollections, ProductCollection } from "@/data/mockData";
 import { toast } from "sonner";
+import { useActivityLog } from "./useActivityLog";
 
 const PAGE_SIZE = 50;
 
@@ -142,9 +143,10 @@ export function useProductCounts(competitor: string) {
   });
 }
 
-// Mutation to update product status
+// Mutation to update product status with activity logging
 export function useUpdateProductStatus() {
   const queryClient = useQueryClient();
+  const { logActivity } = useActivityLog();
 
   return useMutation({
     mutationFn: async ({
@@ -162,10 +164,26 @@ export function useUpdateProductStatus() {
         .eq("id", productId);
 
       if (error) throw error;
+      return { productId, status };
     },
-    onSuccess: () => {
+    onSuccess: ({ productId, status }) => {
+      // Log swipe activity for analytics
+      const action =
+        status === "positive"
+          ? "Swiped right (positive)"
+          : status === "negative"
+          ? "Swiped left (negative)"
+          : status === "trash"
+          ? "Moved to trash"
+          : `Status changed to ${status}`;
+
+      logActivity(action, "product", "product", productId, undefined, {
+        new_status: status,
+      });
+
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["productCounts"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
     },
     onError: () => {
       toast.error("Failed to update product");
@@ -173,9 +191,10 @@ export function useUpdateProductStatus() {
   });
 }
 
-// Mutation for bulk status updates
+// Mutation for bulk status updates with activity logging
 export function useBulkUpdateStatus() {
   const queryClient = useQueryClient();
+  const { logActivity } = useActivityLog();
 
   return useMutation({
     mutationFn: async ({
@@ -198,11 +217,28 @@ export function useBulkUpdateStatus() {
         .in("id", productIds);
 
       if (error) throw error;
-      return { count: productIds.length, status };
+      return { count: productIds.length, status, productIds };
     },
-    onSuccess: ({ count, status }) => {
+    onSuccess: ({ count, status, productIds }) => {
+      // Log bulk action
+      const action =
+        status === "positive"
+          ? `Bulk marked ${count} products positive`
+          : status === "negative"
+          ? `Bulk marked ${count} products negative`
+          : status === "trash"
+          ? `Bulk moved ${count} products to trash`
+          : `Bulk changed ${count} products to ${status}`;
+
+      logActivity(action, "product", undefined, undefined, undefined, {
+        new_status: status,
+        product_count: count,
+        product_ids: productIds,
+      });
+
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["productCounts"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
       toast.success(`${count} products moved to ${status}`);
     },
     onError: () => {

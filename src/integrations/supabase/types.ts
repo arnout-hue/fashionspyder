@@ -590,6 +590,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_competitor_stats: {
+        Args: never
+        Returns: {
+          competitor: string
+          negative: number
+          pending: number
+          positive: number
+          total: number
+          total_value: number
+          win_rate: number
+        }[]
+      }
+      get_crawl_performance: {
+        Args: { days?: number }
+        Returns: {
+          competitor_name: string
+          date: string
+          new_products_scraped: number
+          product_urls_found: number
+          total_urls_found: number
+        }[]
+      }
+      get_dashboard_stats: {
+        Args: never
+        Returns: {
+          negative_count: number
+          pending_count: number
+          pending_value: number
+          positive_count: number
+          positive_value: number
+          total_products: number
+          trash_count: number
+        }[]
+      }
+      get_sourcing_history: {
+        Args: { days?: number }
+        Returns: {
+          competitor: string
+          date: string
+          products_added: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
