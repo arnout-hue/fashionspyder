@@ -43,7 +43,7 @@ async function triggerAgentScrape(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        competitorId: competitor.id,
+        competitor: competitor.id,
         limit 
       }),
     });
