@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DiscoverView } from "@/components/DiscoverView";
 import { SwipeSkeleton } from "@/components/ProductSkeleton";
 import { useAppContext } from "@/components/AppLayout";
@@ -27,10 +27,23 @@ export default function DiscoverPage() {
   // Accumulate products across pages
   const [allProducts, setAllProducts] = useState<ProductWithCollections[]>([]);
 
-  // Sync fetched data with accumulated products
-  if (data?.data && page === 0 && allProducts.length === 0) {
-    setAllProducts(data.data);
-  }
+  // Sync fetched data with accumulated products - using useEffect to avoid setting state during render
+  useEffect(() => {
+    if (data?.data && page === 0 && allProducts.length === 0) {
+      setAllProducts(data.data);
+    }
+  }, [data?.data, page, allProducts.length]);
+
+  // Merge new data when loading more - using useEffect
+  useEffect(() => {
+    if (data?.data && page > 0 && !isFetching) {
+      const existingIds = new Set(allProducts.map((p) => p.id));
+      const newProducts = data.data.filter((p) => !existingIds.has(p.id));
+      if (newProducts.length > 0) {
+        setAllProducts((prev) => [...prev, ...newProducts]);
+      }
+    }
+  }, [data?.data, page, isFetching]);
 
   const handleSwipeRight = (product: ProductWithCollections) => {
     updateStatus.mutate({ productId: product.id, status: "positive" });
@@ -68,15 +81,6 @@ export default function DiscoverPage() {
     setPage(nextPage);
     // Data will be fetched automatically by the query
   };
-
-  // Merge new data when loading more
-  if (data?.data && page > 0 && !isFetching) {
-    const existingIds = new Set(allProducts.map((p) => p.id));
-    const newProducts = data.data.filter((p) => !existingIds.has(p.id));
-    if (newProducts.length > 0) {
-      setAllProducts((prev) => [...prev, ...newProducts]);
-    }
-  }
 
   // Use accumulated products or initial data
   const products =
