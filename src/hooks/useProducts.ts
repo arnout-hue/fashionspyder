@@ -109,35 +109,25 @@ export function useProducts(
   });
 }
 
-// Hook to get product counts for navigation badges
+// Hook to get product counts for navigation badges (uses server-side RPC to avoid row limits)
 export function useProductCounts(competitor: string) {
   return useQuery({
     queryKey: ["productCounts", competitor],
     queryFn: async () => {
-      let baseQuery = supabase.from("products").select("status");
-      
-      if (competitor !== "All") {
-        baseQuery = baseQuery.eq("competitor", competitor);
-      }
-
-      const { data, error } = await baseQuery;
+      const { data, error } = await supabase.rpc("get_product_counts", {
+        filter_competitor: competitor === "All" ? null : competitor,
+      });
 
       if (error) throw error;
 
-      const counts = {
-        pending: 0,
-        positive: 0,
-        negative: 0,
-        trash: 0,
+      // RPC returns a single row with the counts
+      const row = data?.[0];
+      return {
+        pending: Number(row?.pending_count || 0),
+        positive: Number(row?.positive_count || 0),
+        negative: Number(row?.negative_count || 0),
+        trash: Number(row?.trash_count || 0),
       };
-
-      data?.forEach((p) => {
-        if (p.status in counts) {
-          counts[p.status as keyof typeof counts]++;
-        }
-      });
-
-      return counts;
     },
     staleTime: 10000, // 10 seconds
   });
