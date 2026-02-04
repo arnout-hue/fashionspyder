@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RefreshCw, ChevronDown, ChevronUp, Search, Filter, Package, XCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface CrawlLog {
   id: string;
@@ -52,6 +53,8 @@ export function CrawlLogs() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchJobs = useCallback(async () => {
     const { data } = await supabase
@@ -97,13 +100,36 @@ export function CrawlLogs() {
     setLoading(false);
   }, [selectedJob, selectedType, searchQuery]);
 
+  // Auto-refresh on mount and when component becomes visible
   useEffect(() => {
     fetchJobs();
-  }, [fetchJobs]);
-
-  useEffect(() => {
     fetchLogs();
-  }, [fetchLogs]);
+    
+    // Set up auto-refresh every 30 seconds when component is visible
+    refreshIntervalRef.current = setInterval(() => {
+      fetchJobs();
+      fetchLogs();
+    }, 30000);
+
+    // Refresh on window focus
+    const handleFocus = () => {
+      fetchJobs();
+      fetchLogs();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchJobs, fetchLogs]);
+
+  // Invalidate related queries when we refresh
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['crawlJobs'] });
+  }, [jobs, queryClient]);
 
   const toggleRowExpanded = (id: string) => {
     setExpandedRows(prev => {

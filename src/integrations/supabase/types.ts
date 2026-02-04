@@ -624,6 +624,15 @@ export type Database = {
           trash_count: number
         }[]
       }
+      get_product_counts: {
+        Args: { filter_competitor?: string }
+        Returns: {
+          negative_count: number
+          pending_count: number
+          positive_count: number
+          trash_count: number
+        }[]
+      }
       get_sourcing_history: {
         Args: { days?: number }
         Returns: {
