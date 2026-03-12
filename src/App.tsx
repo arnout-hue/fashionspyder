@@ -23,6 +23,7 @@ import { ActivityLog } from "./components/ActivityLog";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import { DuplicateDetection } from "./components/DuplicateDetection";
 import ReportsPage from "./pages/ReportsPage";
+import ReportDetailPage from "./pages/ReportDetailPage";
 
 const queryClient = new QueryClient();
 
