@@ -1,11 +1,32 @@
 import { useState } from "react";
-import { Copy, ExternalLink, ChevronDown, ChevronUp, Search } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Copy, ExternalLink, ChevronDown, ChevronUp, Search, ImageOff } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDuplicateProducts, DuplicateGroup } from "@/hooks/useDuplicates";
+
+function ProductImage({ src, alt, className }: { src: string | null; alt: string; className?: string }) {
+  const [error, setError] = useState(false);
+
+  if (!src || error) {
+    return (
+      <div className={`flex items-center justify-center bg-muted text-muted-foreground ${className}`}>
+        <ImageOff className="h-5 w-5" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`object-cover ${className}`}
+      onError={() => setError(true)}
+      loading="lazy"
+    />
+  );
+}
 
 function DuplicateCard({ group }: { group: DuplicateGroup }) {
   const [expanded, setExpanded] = useState(false);
@@ -22,25 +43,17 @@ function DuplicateCard({ group }: { group: DuplicateGroup }) {
       ? new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(p)
       : "—";
 
+  // Find the first valid image from all variants
+  const thumbnailUrl = group.image_urls.find((url) => url) || null;
+
   return (
     <Card className="overflow-hidden">
       <div
         className="flex items-start gap-4 p-4 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        {/* Thumbnail */}
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted">
-          {group.image_urls[0] ? (
-            <img
-              src={group.image_urls[0]}
-              alt={group.normalized_name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-              <Copy className="h-6 w-6" />
-            </div>
-          )}
+          <ProductImage src={thumbnailUrl} alt={group.normalized_name} className="h-full w-full" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -81,15 +94,11 @@ function DuplicateCard({ group }: { group: DuplicateGroup }) {
             {group.product_ids.map((id, i) => (
               <div key={id} className="flex items-center gap-3 text-sm">
                 <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded bg-background border">
-                  {group.image_urls[i] ? (
-                    <img
-                      src={group.image_urls[i]!}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-muted" />
-                  )}
+                  <ProductImage
+                    src={group.image_urls[i] || null}
+                    alt={group.product_names[i] || ""}
+                    className="h-full w-full"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-xs">{group.product_names[i]}</p>
