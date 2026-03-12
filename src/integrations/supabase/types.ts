@@ -399,6 +399,47 @@ export type Database = {
           },
         ]
       }
+      product_comments: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          mentioned_user_ids: string[] | null
+          product_id: string
+          updated_at: string | null
+          user_email: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          mentioned_user_ids?: string[] | null
+          product_id: string
+          updated_at?: string | null
+          user_email?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          mentioned_user_ids?: string[] | null
+          product_id?: string
+          updated_at?: string | null
+          user_email?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_comments_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           competitor: string
@@ -504,6 +545,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      reports: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          data: Json
+          id: string
+          period_end: string
+          period_start: string
+          report_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          data?: Json
+          id?: string
+          period_end: string
+          period_start: string
+          report_type?: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          data?: Json
+          id?: string
+          period_end?: string
+          period_start?: string
+          report_type?: string
+        }
+        Relationships: []
       }
       suppliers: {
         Row: {
@@ -624,6 +695,20 @@ export type Database = {
           trash_count: number
         }[]
       }
+      get_duplicate_products: {
+        Args: { max_results?: number; min_competitors?: number }
+        Returns: {
+          competitor_count: number
+          competitors: string[]
+          image_urls: string[]
+          normalized_name: string
+          prices: number[]
+          product_count: number
+          product_ids: string[]
+          product_names: string[]
+          product_urls: string[]
+        }[]
+      }
       get_product_counts: {
         Args: { filter_competitor?: string }
         Returns: {
@@ -639,6 +724,18 @@ export type Database = {
           competitor: string
           date: string
           products_added: number
+        }[]
+      }
+      get_weekly_summary: {
+        Args: { days?: number }
+        Returns: {
+          daily_breakdown: Json
+          negative_count: number
+          pending_count: number
+          positive_count: number
+          top_competitors: Json
+          total_new_products: number
+          win_rate: number
         }[]
       }
       has_role: {
