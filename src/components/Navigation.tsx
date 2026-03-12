@@ -74,6 +74,16 @@ export const Navigation = ({
       icon: <BarChart3 className="h-4 w-4" />,
     },
     {
+      path: "/duplicates",
+      label: "Duplicates",
+      icon: <Copy className="h-4 w-4" />,
+    },
+    {
+      path: "/reports",
+      label: "Reports",
+      icon: <FileText className="h-4 w-4" />,
+    },
+    {
       path: "/crawl",
       label: "Crawl Competitors",
       icon: <Globe className="h-4 w-4" />,

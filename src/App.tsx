@@ -109,6 +109,8 @@ const AppRoutes = () => (
       <Route path="users" element={<UserManagement />} />
       <Route path="activity" element={<ActivityLog />} />
       <Route path="analytics" element={<AnalyticsPage />} />
+      <Route path="duplicates" element={<DuplicateDetection />} />
+      <Route path="reports" element={<ReportsPage />} />
     </Route>
     
     <Route path="*" element={<NotFound />} />
