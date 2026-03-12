@@ -21,6 +21,8 @@ import ManageColleaguesPage from "./pages/ManageColleaguesPage";
 import { UserManagement } from "./components/UserManagement";
 import { ActivityLog } from "./components/ActivityLog";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import { DuplicateDetection } from "./components/DuplicateDetection";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient();
 
