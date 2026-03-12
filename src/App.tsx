@@ -21,6 +21,8 @@ import ManageColleaguesPage from "./pages/ManageColleaguesPage";
 import { UserManagement } from "./components/UserManagement";
 import { ActivityLog } from "./components/ActivityLog";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import { DuplicateDetection } from "./components/DuplicateDetection";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient();
 
@@ -107,6 +109,8 @@ const AppRoutes = () => (
       <Route path="users" element={<UserManagement />} />
       <Route path="activity" element={<ActivityLog />} />
       <Route path="analytics" element={<AnalyticsPage />} />
+      <Route path="duplicates" element={<DuplicateDetection />} />
+      <Route path="reports" element={<ReportsPage />} />
     </Route>
     
     <Route path="*" element={<NotFound />} />
