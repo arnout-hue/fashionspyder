@@ -23,6 +23,7 @@ import { ActivityLog } from "./components/ActivityLog";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import { DuplicateDetection } from "./components/DuplicateDetection";
 import ReportsPage from "./pages/ReportsPage";
+import ReportDetailPage from "./pages/ReportDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ const AppRoutes = () => (
       <Route path="analytics" element={<AnalyticsPage />} />
       <Route path="duplicates" element={<DuplicateDetection />} />
       <Route path="reports" element={<ReportsPage />} />
+      <Route path="reports/:id" element={<ReportDetailPage />} />
     </Route>
     
     <Route path="*" element={<NotFound />} />
