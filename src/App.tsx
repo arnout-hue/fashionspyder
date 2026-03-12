@@ -112,6 +112,7 @@ const AppRoutes = () => (
       <Route path="analytics" element={<AnalyticsPage />} />
       <Route path="duplicates" element={<DuplicateDetection />} />
       <Route path="reports" element={<ReportsPage />} />
+      <Route path="reports/:id" element={<ReportDetailPage />} />
     </Route>
     
     <Route path="*" element={<NotFound />} />
