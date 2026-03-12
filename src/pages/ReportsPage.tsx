@@ -152,9 +152,10 @@ function ReportHistory({ reports }: { reports: Report[] }) {
       <CardContent>
         <div className="space-y-2">
           {reports.map((r) => (
-            <div
+            <Link
               key={r.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              to={`/reports/${r.id}`}
+              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
             >
               <div>
                 <span className="font-medium capitalize">{r.report_type} Report</span>
@@ -171,7 +172,7 @@ function ReportHistory({ reports }: { reports: Report[] }) {
                   {format(new Date(r.created_at), "MMM d HH:mm")}
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </CardContent>
